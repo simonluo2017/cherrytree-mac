@@ -74,6 +74,11 @@ public:
     void synch_spell_check_change_from_gspell_right_click_menu();
 
     void set_buffer(const Glib::RefPtr<Gtk::TextBuffer>& buffer);
+    // the CtTextView owning the given widget (the wrapped GtkSourceView), nullptr if none
+    static CtTextView* from_widget(Gtk::Widget* pWidget);
+    // column selection keys (Alt/Option+Shift+arrows extend, Escape leaves): must be given
+    // the key press before the window accelerators, returns true when consumed
+    bool column_edit_handle_key_press(GdkEventKey* pEventKey);
     CtColEditState column_edit_get_state() const {
         return _columnEdit.get_state();
     }
@@ -173,6 +178,7 @@ private:
     GtkSourceView* const _pGtkSourceView;
     Gtk::TextView* _pTextView;
     CtColumnEdit _columnEdit;
+    std::vector<sigc::connection> _sigcConnections;
     guint32      _todoRotateTime{0};
     std::string  _syntaxHighlighting;
 };

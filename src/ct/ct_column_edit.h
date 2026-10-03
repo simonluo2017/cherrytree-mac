@@ -28,6 +28,8 @@
 #include <atomic>
 #include <vector>
 #include <mutex>
+#include <optional>
+#include <algorithm>
 
 enum class CtColEditState { Off, Selection, PrEdit, Edit };
 
@@ -57,11 +59,25 @@ public:
     bool get_own_insert_delete_active() { return _myOwnInsertDelete; }
     void focus_in();
 
+    enum class Direction { Up, Down, Left, Right };
+    // Keyboard driven column selection (TextMate style: Option/Alt+Shift+arrows). Starts a
+    // rectangle at the cursor (or from the current selection) and extends it in the given
+    // direction. Returns false when the key was not handled.
+    bool key_extend(const Direction direction);
+    // Paints the rectangular selection on top of the text view: connect to the text view
+    // 'draw' signal after the default handler.
+    void draw_overlay(const Cairo::RefPtr<Cairo::Context>& cr);
+
 private:
 #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
     Gdk::Point _get_point(const Gtk::TextIter& textIter);
     Gdk::Point _get_cursor_place();
     Gdk::Point _get_cursor_column_mode_place();
+    void _rebuild_marks(const Gdk::Point& pointStart, const Gdk::Point& pointEnd);
+    bool _modifiers_allow_column_selection();
+    Gdk::Point _kbAnchor{-1,-1};
+    Gdk::Point _kbEnd{-1,-1};
+    bool _kbActive{false};
 #endif
     void _clear_marks(const bool alsoStart = true);
     void _predit_to_edit();

@@ -74,18 +74,25 @@ bool CtColumnEdit::_enforce_cursor_column_mode_place()
 void CtColumnEdit::_clear_marks(const bool alsoStart)
 {
     Glib::RefPtr<Gtk::TextBuffer> pTextBuffer = _textView.get_buffer();
+    auto f_delete_mark = [&pTextBuffer](Glib::RefPtr<Gtk::TextMark>& rMark){
+        // the buffer may have been switched or torn down (e.g. focus out while the window is
+        // being destroyed): only touch marks still alive in the current buffer
+        if (rMark and not rMark->get_deleted() and rMark->get_buffer() == pTextBuffer) {
+            rMark->set_visible(false);
+            pTextBuffer->delete_mark(rMark);
+        }
+    };
     while (not _marksEnd.empty()) {
-        _marksEnd.back()->set_visible(false);
-        pTextBuffer->delete_mark(_marksEnd.back());
+        f_delete_mark(_marksEnd.back());
         _marksEnd.pop_back();
     }
     if (alsoStart) {
         while (not _marksStart.empty()) {
-            _marksStart.back()->set_visible(false);
-            pTextBuffer->delete_mark(_marksStart.back());
+            f_delete_mark(_marksStart.back());
             _marksStart.pop_back();
         }
     }
+    _textView.queue_draw();
 }
 
 void CtColumnEdit::_predit_to_edit_iter(Gtk::TextIter& iterStart, Gtk::TextIter& iterEnd, bool& firstLine)
@@ -352,17 +359,205 @@ void CtColumnEdit::_edit_insert_delete(const bool isInsert)
 
 void CtColumnEdit::column_mode_off()
 {
+    _kbActive = false;
     if (CtColEditState::Off != _state) {
         _state = CtColEditState::Off;
         _clear_marks();
         _ctrlDown = false;
         _altDown = false;
+        _textView.queue_draw();
         if (_stateOnOffCallback) _stateOnOffCallback(false);
     }
     else {
         if (_ctrlDown) _ctrlDown = false;
         if (_altDown) _altDown = false;
     }
+}
+
+bool CtColumnEdit::_modifiers_allow_column_selection()
+{
+    // the modifier keys may have been pressed while the text view had no focus (no key
+    // event seen): also query the current state of the pointer device
+    bool ctrl = _ctrlDown;
+    bool alt = _altDown;
+    if (Glib::RefPtr<Gdk::Window> rGdkWindow = _textView.get_window(Gtk::TEXT_WINDOW_TEXT)) {
+        if (Glib::RefPtr<Gdk::Seat> rSeat = rGdkWindow->get_display()->get_default_seat()) {
+            if (Glib::RefPtr<Gdk::Device> rPointer = rSeat->get_pointer()) {
+                int x{0}, y{0};
+                Gdk::ModifierType mask{};
+                (void)rGdkWindow->get_device_position(rPointer, x, y, mask);
+                ctrl = ctrl or (mask & Gdk::CONTROL_MASK) == Gdk::CONTROL_MASK;
+                alt = alt or (mask & Gdk::MOD1_MASK) == Gdk::MOD1_MASK;
+            }
+        }
+    }
+#if defined(__APPLE__)
+    // TextMate style: Option (Alt) + drag selects a column
+    return alt;
+#else
+    // Alt + drag moves the window in most Linux desktops: Control + Alt + drag
+    return ctrl and alt;
+#endif
+}
+
+void CtColumnEdit::_rebuild_marks(const Gdk::Point& pointStart, const Gdk::Point& pointEnd)
+{
+    Glib::RefPtr<Gtk::TextBuffer> pTextBuffer = _textView.get_buffer();
+    _pointStart = Gdk::Point{pointStart.get_x(), pointStart.get_y()};
+    _pointEnd = Gdk::Point{pointEnd.get_x(), pointEnd.get_y()};
+    _clear_marks();
+    if (_pointStart != _pointEnd) {
+        // in first iteration populate _marksStart
+        std::vector<Glib::RefPtr<Gtk::TextMark>>* pMarksVec = &_marksStart;
+        for (const int x : {_pointStart.get_x(), _pointEnd.get_x()}) {
+            for (int y = _pointStart.get_y(); y <= _pointEnd.get_y(); ++y) {
+                Gtk::TextIter currIter = pTextBuffer->get_iter_at_line_offset(y, x);
+                if ( currIter and
+                     currIter.get_line_offset() == x and
+                     currIter.get_line() == y )
+                {
+                    Glib::RefPtr<Gtk::TextMark> rMark = pTextBuffer->create_mark(currIter);
+                    rMark->set_visible(true);
+                    pMarksVec->push_back(rMark);
+                }
+            }
+            // in second iteration populate _marksEnd
+            pMarksVec = &_marksEnd;
+        }
+    }
+    _textView.queue_draw();
+}
+
+bool CtColumnEdit::key_extend(const Direction direction)
+{
+    Glib::RefPtr<Gtk::TextBuffer> pTextBuffer = _textView.get_buffer();
+    if (CtColEditState::Off == _state) {
+        // start the rectangle at the cursor, or from the bounds of the current selection
+        Gtk::TextIter iterSelStart, iterSelEnd;
+        if (pTextBuffer->get_selection_bounds(iterSelStart, iterSelEnd)) {
+            _kbAnchor = _get_point(iterSelStart);
+            _kbEnd = _get_point(iterSelEnd);
+        }
+        else {
+            _kbAnchor = _get_cursor_place();
+            _kbEnd = Gdk::Point{_kbAnchor.get_x(), _kbAnchor.get_y()};
+        }
+        _kbActive = true;
+        _state = CtColEditState::Selection;
+        if (_stateOnOffCallback) _stateOnOffCallback(true);
+    }
+    else if (not _kbActive) {
+        // a column selection made with the mouse: continue from its rectangle
+        if (_marksStart.empty() or not _marksStart.front() or not _marksStart.back()) {
+            return false;
+        }
+        _kbAnchor = _get_point(_marksStart.front()->get_iter());
+        if (not _marksEnd.empty() and _marksEnd.back()) {
+            _kbEnd = _get_point(_marksEnd.back()->get_iter());
+        }
+        else {
+            _kbEnd = _get_point(_marksStart.back()->get_iter());
+        }
+        _kbActive = true;
+    }
+    const int numLines = pTextBuffer->get_line_count();
+    switch (direction) {
+        case Direction::Up: {
+            if (_kbEnd.get_y() > 0) _kbEnd.set_y(_kbEnd.get_y() - 1);
+        } break;
+        case Direction::Down: {
+            if (_kbEnd.get_y() < numLines - 1) _kbEnd.set_y(_kbEnd.get_y() + 1);
+        } break;
+        case Direction::Left: {
+            if (_kbEnd.get_x() > 0) _kbEnd.set_x(_kbEnd.get_x() - 1);
+        } break;
+        case Direction::Right: {
+            // extend to the right only while at least one line of the rectangle is long enough
+            const int newX = _kbEnd.get_x() + 1;
+            const int yMin = std::min(_kbAnchor.get_y(), _kbEnd.get_y());
+            const int yMax = std::max(_kbAnchor.get_y(), _kbEnd.get_y());
+            for (int y = yMin; y <= yMax; ++y) {
+                Gtk::TextIter iter = pTextBuffer->get_iter_at_line_offset(y, newX);
+                if (iter and iter.get_line() == y and iter.get_line_offset() == newX) {
+                    _kbEnd.set_x(newX);
+                    break;
+                }
+            }
+        } break;
+    }
+    const Gdk::Point pointStart{std::min(_kbAnchor.get_x(), _kbEnd.get_x()), std::min(_kbAnchor.get_y(), _kbEnd.get_y())};
+    const Gdk::Point pointEnd{std::max(_kbAnchor.get_x(), _kbEnd.get_x()), std::max(_kbAnchor.get_y(), _kbEnd.get_y())};
+    _state = CtColEditState::Selection;
+    _rebuild_marks(pointStart, pointEnd);
+    if (_marksStart.empty()) {
+        // zero size rectangle (e.g. the first key press): keep the mode on with a caret only
+        Gtk::TextIter iter = pTextBuffer->get_iter_at_line_offset(pointStart.get_y(), pointStart.get_x());
+        if (iter) {
+            Glib::RefPtr<Gtk::TextMark> rMark = pTextBuffer->create_mark(iter);
+            rMark->set_visible(true);
+            _marksStart.push_back(rMark);
+        }
+        else {
+            column_mode_off();
+            return true;
+        }
+    }
+    // as after the mouse button release: ready to edit
+    _state = CtColEditState::PrEdit;
+    if (not _enforce_cursor_column_mode_place()) {
+        column_mode_off();
+        return true;
+    }
+    if (pointStart.get_x() == pointEnd.get_x()) {
+        // zero width: one caret per line, typing inserts on all of them
+        _state = CtColEditState::Edit;
+        _clear_marks(false/*alsoStart*/);
+    }
+    _textView.scroll_to(pTextBuffer->get_insert());
+    _textView.queue_draw();
+    return true;
+}
+
+void CtColumnEdit::draw_overlay(const Cairo::RefPtr<Cairo::Context>& cr)
+{
+    if (CtColEditState::Selection != _state and CtColEditState::PrEdit != _state) {
+        return;
+    }
+    const size_t num_rows = _marksStart.size();
+    if (0 == num_rows or _marksEnd.size() != num_rows) {
+        return;
+    }
+    GtkTextView* pGtkTextView = GTK_TEXT_VIEW(_textView.gobj());
+    GdkWindow* pTextWin = gtk_text_view_get_window(pGtkTextView, GTK_TEXT_WINDOW_TEXT);
+    if (not pTextWin or not gtk_cairo_should_draw_window(cr->cobj(), pTextWin)) {
+        return;
+    }
+    Gdk::RGBA rgba;
+    if (not _textView.get_style_context()->lookup_color("theme_selected_bg_color", rgba)) {
+        rgba.set_rgba(0.2, 0.5, 0.9, 1.0);
+    }
+    cr->save();
+    gtk_cairo_transform_to_window(cr->cobj(), GTK_WIDGET(_textView.gobj()), pTextWin);
+    cr->set_source_rgba(rgba.get_red(), rgba.get_green(), rgba.get_blue(), 0.35);
+    for (size_t r = 0u; r < num_rows; ++r) {
+        auto pMarkStart = _marksStart.at(r);
+        auto pMarkEnd = _marksEnd.at(r);
+        if (not pMarkStart or not pMarkEnd) continue;
+        Gtk::TextIter iterStart = pMarkStart->get_iter();
+        Gtk::TextIter iterEnd = pMarkEnd->get_iter();
+        if (not iterStart or not iterEnd) continue;
+        Gdk::Rectangle rectStart, rectEnd;
+        _textView.get_iter_location(iterStart, rectStart);
+        _textView.get_iter_location(iterEnd, rectEnd);
+        int wx1{0}, wy1{0}, wx2{0}, wy2{0};
+        _textView.buffer_to_window_coords(Gtk::TEXT_WINDOW_TEXT, rectStart.get_x(), rectStart.get_y(), wx1, wy1);
+        _textView.buffer_to_window_coords(Gtk::TEXT_WINDOW_TEXT, rectEnd.get_x(), rectEnd.get_y(), wx2, wy2);
+        const int x = std::min(wx1, wx2);
+        const int w = std::max(std::abs(wx2 - wx1), 2);
+        cr->rectangle(x, wy1, w, rectStart.get_height());
+        cr->fill();
+    }
+    cr->restore();
 }
 
 void CtColumnEdit::text_inserted(const Gtk::TextIter& pos, const Glib::ustring& text)
@@ -375,10 +570,11 @@ void CtColumnEdit::text_inserted(const Gtk::TextIter& pos, const Glib::ustring& 
         else {
             spdlog::debug("{} {},{}", __FUNCTION__, cursorPlace.get_y()+1, cursorPlace.get_x());
         }
-    });  
+    });
     if (CtColEditState::Off == _state or _myOwnInsertDelete) {
         return;
     }
+    _kbActive = false; // the rectangle changes with the edit, keyboard extension restarts from the marks
     {
         std::lock_guard<std::mutex> lock(_mutexLastInOut);
         _lastInsertedText = text;
@@ -406,6 +602,7 @@ void CtColumnEdit::text_removed(const Gtk::TextIter& range_start, const Gtk::Tex
     if (CtColEditState::Off == _state or _myOwnInsertDelete) {
         return;
     }
+    _kbActive = false;
     if (0 == _marksStart.size() or not _marksStart.front()) {
         column_mode_off();
         return;
@@ -543,33 +740,13 @@ void CtColumnEdit::selection_update()
     if ( _get_point(startIter) != _pointStart or
          _get_point(endIter) != _pointEnd )
     {
-        if (CtColEditState::Off == _state and _ctrlDown and _altDown) {
+        if (CtColEditState::Off == _state and _modifiers_allow_column_selection()) {
             _state = CtColEditState::Selection;
+            _kbActive = false;
             if (_stateOnOffCallback) _stateOnOffCallback(true);
         }
-        if (CtColEditState::Selection == _state) {
-            _pointStart = _get_point(startIter);
-            _pointEnd = _get_point(endIter);
-            _clear_marks();
-            if (_pointStart != _pointEnd) {
-                // in first iteration populate _marksStart
-                std::vector<Glib::RefPtr<Gtk::TextMark>>* pMarksVec = &_marksStart;
-                for (const int x : {_pointStart.get_x(), _pointEnd.get_x()}) {
-                    for (int y = _pointStart.get_y(); y <= _pointEnd.get_y(); ++y) {
-                        Gtk::TextIter currIter = pTextBuffer->get_iter_at_line_offset(y, x);
-                        if ( currIter and
-                             currIter.get_line_offset() == x and
-                             currIter.get_line() == y )
-                        {
-                            Glib::RefPtr<Gtk::TextMark> rMark = pTextBuffer->create_mark(currIter);
-                            rMark->set_visible(true);
-                            pMarksVec->push_back(rMark);
-                        }
-                    }
-                    // in second iteration populate _marksEnd
-                    pMarksVec = &_marksEnd;
-                }
-            }
+        if (CtColEditState::Selection == _state and not _kbActive) {
+            _rebuild_marks(_get_point(startIter), _get_point(endIter));
         }
     }
 }
@@ -617,6 +794,15 @@ void CtColumnEdit::focus_in()
 }
 
 void CtColumnEdit::selection_update()
+{
+}
+
+bool CtColumnEdit::key_extend(const Direction /*direction*/)
+{
+    return false;
+}
+
+void CtColumnEdit::draw_overlay(const Cairo::RefPtr<Cairo::Context>& /*cr*/)
 {
 }
 

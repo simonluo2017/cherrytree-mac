@@ -110,6 +110,13 @@ bool CtMainWin::_on_treeview_button_release_event(GdkEventButton* event)
 
 bool CtMainWin::_on_window_key_press_event(GdkEventKey* event)
 {
+    // column selection keys (Alt/Option+Shift+arrows) take precedence over the window
+    // accelerators (node moves) while a text view has the focus
+    if (CtTextView* pCtTextView = CtTextView::from_widget(get_focus())) {
+        if (pCtTextView->column_edit_handle_key_press(event)) {
+            return true;
+        }
+    }
     if (event->state & GDK_CONTROL_MASK) {
         if (GDK_KEY_Tab == event->keyval or GDK_KEY_ISO_Left_Tab == event->keyval) {
             _uCtActions->toggle_focus_tree_text();

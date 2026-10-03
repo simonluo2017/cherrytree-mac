@@ -74,21 +74,21 @@ CtTextView::CtTextView(CtMainWin* pCtMainWin)
     }
 
     // column edit signals
-    _pTextView->signal_event_after().connect([this](GdkEvent* pEvent){
+    _sigcConnections.push_back(_pTextView->signal_event_after().connect([this](GdkEvent* pEvent){
         switch (pEvent->type) {
             case GDK_KEY_PRESS: {
-                if (pEvent->key.keyval == GDK_KEY_Control_L) {
+                if (pEvent->key.keyval == GDK_KEY_Control_L or pEvent->key.keyval == GDK_KEY_Control_R) {
                     _columnEdit.button_control_changed(true/*isDown*/);
                 }
-                else if (pEvent->key.keyval == GDK_KEY_Alt_L) {
+                else if (pEvent->key.keyval == GDK_KEY_Alt_L or pEvent->key.keyval == GDK_KEY_Alt_R) {
                     _columnEdit.button_alt_changed(true/*isDown*/);
                 }
             } break;
             case GDK_KEY_RELEASE: {
-                if (pEvent->key.keyval == GDK_KEY_Control_L) {
+                if (pEvent->key.keyval == GDK_KEY_Control_L or pEvent->key.keyval == GDK_KEY_Control_R) {
                     _columnEdit.button_control_changed(false/*isDown*/);
                 }
-                else if (pEvent->key.keyval == GDK_KEY_Alt_L) {
+                else if (pEvent->key.keyval == GDK_KEY_Alt_L or pEvent->key.keyval == GDK_KEY_Alt_R) {
                     _columnEdit.button_alt_changed(false/*isDown*/);
                 }
             } break;
@@ -100,17 +100,28 @@ CtTextView::CtTextView(CtMainWin* pCtMainWin)
             default:
                 break;
         }
-    }, false);
-    _pTextView->signal_focus_out_event().connect([this](GdkEventFocus*/*gdk_event*/){
+    }, false));
+    // column selection with the keyboard (TextMate style): the keys are routed here by the
+    // main window before its accelerators (see CtMainWin::_on_window_key_press_event)
+    g_object_set_data(G_OBJECT(_pGtkSourceView), "CtTextView", this);
+    _sigcConnections.push_back(_pTextView->signal_key_press_event().connect([this](GdkEventKey* pEventKey)->bool{
+        return column_edit_handle_key_press(pEventKey);
+    }, false));
+    // paint the rectangular selection on top of the text
+    _sigcConnections.push_back(_pTextView->signal_draw().connect([this](const Cairo::RefPtr<Cairo::Context>& cr)->bool{
+        _columnEdit.draw_overlay(cr);
+        return false; /*propagate*/
+    }, true/*after*/));
+    _sigcConnections.push_back(_pTextView->signal_focus_out_event().connect([this](GdkEventFocus*/*gdk_event*/){
         _columnEdit.column_mode_off();
         _set_highlight_current_line_enabled(false);
         return false; /*propagate event*/
-    }, false);
-    _pTextView->signal_focus_in_event().connect([this](GdkEventFocus*/*gdk_event*/){
+    }, false));
+    _sigcConnections.push_back(_pTextView->signal_focus_in_event().connect([this](GdkEventFocus*/*gdk_event*/){
         _set_highlight_current_line_enabled(true);
         _columnEdit.focus_in();
         return false; /*propagate event*/
-    }, false);
+    }, false));
 #endif
 
     #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
@@ -119,24 +130,75 @@ CtTextView::CtTextView(CtMainWin* pCtMainWin)
     dest_targets.push_back(Gtk::TargetEntry(CtConst::TARGET_GTK_TEXT_BUFFER_CONTENTS, Gtk::TARGET_SAME_APP, 0));
     _pTextView->drag_dest_set(dest_targets);
 
-    _pTextView->signal_drag_drop().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_drop), false); // 'false' ensures we run before default handlers
-    _pTextView->signal_drag_data_received().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_data_received), false);
-    _pTextView->signal_drag_begin().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_begin), false);
-    _pTextView->signal_drag_end().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_end), false);
+    _sigcConnections.push_back(_pTextView->signal_drag_drop().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_drop), false)); // 'false' ensures we run before default handlers
+    _sigcConnections.push_back(_pTextView->signal_drag_data_received().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_data_received), false));
+    _sigcConnections.push_back(_pTextView->signal_drag_begin().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_begin), false));
+    _sigcConnections.push_back(_pTextView->signal_drag_end().connect(sigc::mem_fun(*this, &CtTextView::_on_drag_end), false));
     #else
     _setup_drag_and_drop_gtk4();
     #endif
     _columnEdit.register_on_off_callback([this](const bool col_edit_on){
         _set_highlight_current_line_enabled(not col_edit_on);
         spdlog::debug("colMode {}", col_edit_on);
+        if (not _pTextView->get_mapped()) {
+            return; // e.g. focus out while the window is being torn down
+        }
+        if (col_edit_on) {
+            _pCtStatusBar->update_status(_("Column Selection (Esc to exit)"));
+        }
+        else {
+            _pCtMainWin->update_selected_node_statusbar_info();
+        }
     });
     _columnEdit.register_new_cursor_row_col_callback([this](const int r, const int c){
         _pCtStatusBar->new_cursor_pos(r, c);
     });
 }
 
+/*static*/ CtTextView* CtTextView::from_widget(Gtk::Widget* pWidget)
+{
+    if (not pWidget) return nullptr;
+    return static_cast<CtTextView*>(g_object_get_data(G_OBJECT(pWidget->gobj()), "CtTextView"));
+}
+
+bool CtTextView::column_edit_handle_key_press(GdkEventKey* pEventKey)
+{
+#if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
+    const guint modifiers = pEventKey->state & gtk_accelerator_get_default_mod_mask();
+    if ((modifiers & (GDK_MOD1_MASK | GDK_SHIFT_MASK)) == (GDK_MOD1_MASK | GDK_SHIFT_MASK) and
+        (modifiers & GDK_CONTROL_MASK) == 0)
+    {
+        std::optional<CtColumnEdit::Direction> direction;
+        switch (pEventKey->keyval) {
+            case GDK_KEY_Up:    case GDK_KEY_KP_Up:    direction = CtColumnEdit::Direction::Up; break;
+            case GDK_KEY_Down:  case GDK_KEY_KP_Down:  direction = CtColumnEdit::Direction::Down; break;
+            case GDK_KEY_Left:  case GDK_KEY_KP_Left:  direction = CtColumnEdit::Direction::Left; break;
+            case GDK_KEY_Right: case GDK_KEY_KP_Right: direction = CtColumnEdit::Direction::Right; break;
+            default: break;
+        }
+        if (direction.has_value()) {
+            return _columnEdit.key_extend(direction.value());
+        }
+    }
+    if (GDK_KEY_Escape == pEventKey->keyval and CtColEditState::Off != _columnEdit.get_state()) {
+        _columnEdit.column_mode_off();
+        return true;
+    }
+#else
+    (void)pEventKey;
+#endif
+    return false;
+}
+
 CtTextView::~CtTextView()
 {
+    // the wrapped text view outlives this object while its parent container is torn down:
+    // make sure no handler is called on a destroyed CtTextView (e.g. focus out on unparent)
+    for (sigc::connection& conn : _sigcConnections) {
+        conn.disconnect();
+    }
+    _sigcConnections.clear();
+    g_object_set_data(G_OBJECT(_pGtkSourceView), "CtTextView", nullptr);
 #ifdef HAVE_LIBSPELLING
     g_clear_object(&_spellingAdapter);
     g_clear_object(&_spellingChecker);
