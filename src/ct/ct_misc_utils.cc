@@ -224,6 +224,25 @@ Gtk::BuiltinIconSize CtMiscUtil::getIconSize(int size)
     }
 }
 
+std::optional<bool> CtMiscUtil::system_appearance_is_dark()
+{
+#if defined(__APPLE__)
+    // the key exists only when the dark appearance is active
+    std::string std_out, std_err;
+    int exit_status{0};
+    try {
+        Glib::spawn_command_line_sync("defaults read -g AppleInterfaceStyle", &std_out, &std_err, &exit_status);
+    }
+    catch (Glib::Error& error) {
+        spdlog::debug("{} {}", __FUNCTION__, error.what().c_str());
+        return std::nullopt;
+    }
+    return 0 == exit_status and std_out.find("Dark") != std::string::npos;
+#else
+    return std::nullopt;
+#endif
+}
+
 void CtMiscUtil::set_widget_margins(Gtk::Widget& widget, int top, int bottom, int left, int right)
 {
     if (top >= 0) widget.set_margin_top(top);

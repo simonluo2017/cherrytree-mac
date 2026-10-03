@@ -117,6 +117,29 @@ public:
     std::vector<Gtk::Toolbar*> build_toolbars(Gtk::MenuToolButton*& pRecentDocsMenuToolButton, Gtk::ToolButton*& pToolButtonSave);
     Gtk::MenuBar*              build_menubar();
 #endif /* GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED) */
+    // Application menu model (Gio::Menu) built from the same XML layout as the classic
+    // GtkMenuBar. On GTK3 it is exported through Gtk::Application::set_menubar(), which on
+    // macOS renders as the native global menu bar (NSMenu) with native key equivalents;
+    // on GTK4 it feeds the Gtk::PopoverMenuBar.
+    // When reuse_existing is true and a model was already built (e.g. by another window of
+    // the same application) that shared model is returned, so that all windows keep the
+    // dynamic sections (bookmarks, recent documents) in sync.
+    Glib::RefPtr<Gio::Menu>    build_gio_menubar(const bool reuse_existing);
+    void                       update_bookmarks_gio_menu(const std::list<std::tuple<gint64, Glib::ustring, const char*>>& bookmarks);
+    void                       update_recent_docs_gio_menu(const CtRecentDocsFilepaths& recentDocsFilepaths);
+    void                       set_bookmarks_top_gio_menu_visible(const bool visible);
+    bool                       has_gio_menubar() const { return static_cast<bool>(_sGioMenuBar); }
+    // action prefix used by the Gio::Menu items ("win." on GTK3, "app." on GTK4)
+    static const char*         gio_action_prefix();
+    // GAction names allow only alphanumerics, '-' and '.': the CherryTree action ids use '_'
+    static std::string         gaction_name(const std::string& id);          // "ct_save" -> "ct-save"
+    static std::string         gio_action_name(const std::string& id);       // "ct_save" -> "win.ct-save" / "app.ct-save"
+    // converts a CherryTree shortcut ("<control>s") into an accelerator usable by
+    // Gtk::Application::set_accels_for_action ("<Primary>s", i.e. Cmd on macOS, Ctrl elsewhere)
+    static std::string         to_primary_accel(const std::string& shortcut);
+    // human readable shortcut for tooltips (uses the macOS modifier symbols on macOS)
+    static std::string         shortcut_display(const std::string& shortcut, const bool macos_primary);
+
 #if GTKMM_MAJOR_VERSION >= 4
     // GTK4 alternatives: Toolbar as boxes of buttons; Menu via Popover with buttons
     std::vector<Gtk::Box*>     build_toolbars4(Gtk::MenuButton*& pRecentDocsMenuButton, Gtk::Button*& pButtonSave);
@@ -129,20 +152,22 @@ public:
                                                        const bool isTopMenu);
     // Full menubar via Gio::Menu + Gtk::PopoverMenuBar (GTK4 equivalent of GTK3 menubar-in-titlebar)
     Gtk::PopoverMenuBar*       build_popover_menubar4();
-    void                       update_bookmarks_gio_menu4(const std::list<std::tuple<gint64, Glib::ustring, const char*>>& bookmarks);
-    void                       update_recent_docs_gio_menu4(const CtRecentDocsFilepaths& recentDocsFilepaths);
 private:
     Gtk::Popover*              _build_actions_popover();
-    Glib::RefPtr<Gio::Menu>    _build_gio_menu4();
-    // Dynamic Gio::Menu sections updated at runtime
-    Glib::RefPtr<Gio::Menu>    _pGioMenuBar4;
-    Glib::RefPtr<Gio::Menu>    _pGioBookmarksMenu4;      // top-level Bookmarks menu
-    Glib::RefPtr<Gio::Menu>    _pGioBookmarksSub4;       // Tree > Bookmarks submenu
-    Glib::RefPtr<Gio::Menu>    _pGioRecentDocsSub4;      // File > Recent Documents submenu
     // Map action id -> widget used in GTK4 (button) for sensitivity/visibility updates
     std::unordered_map<std::string, Gtk::Widget*> _gtk4ActionWidgets;
     static std::string         _shortcut_display(const std::string& accel);
 #endif /* GTKMM_MAJOR_VERSION >= 4 */
+private:
+    // Dynamic Gio::Menu sections updated at runtime; shared by all the windows of the application
+    static Glib::RefPtr<Gio::Menu>     _sGioMenuBar;
+    static Glib::RefPtr<Gio::Menu>     _sGioBookmarksMenu;      // top-level Bookmarks menu
+    static Glib::RefPtr<Gio::Menu>     _sGioBookmarksSub;       // Tree > Bookmarks submenu
+    static Glib::RefPtr<Gio::Menu>     _sGioRecentDocsSub;      // File > Recent Documents submenu
+    static Glib::RefPtr<Gio::MenuItem> _sGioBookmarksTopItem;   // top-level Bookmarks submenu item (optional)
+    static int                         _sGioBookmarksTopIndex;  // position of the top-level Bookmarks menu
+    static bool                        _sGioBookmarksTopShown;
+public:
     Gtk::Menu*                 build_bookmarks_menu(std::list<std::tuple<gint64, Glib::ustring, const char*>>& bookmarks,
                                                     sigc::slot<void, gint64>& bookmark_action,
                                                     const bool isTopMenu);

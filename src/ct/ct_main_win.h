@@ -110,6 +110,8 @@ public:
     void text_view_apply_cursor_position(CtTreeIter& treeIter, const int cursor_pos, const int v_adj_val);
 
     void update_theme();
+    // light/dark appearance (uiAppearance: 0 system, 1 light, 2 dark)
+    void apply_ui_appearance();
 
     bool file_open(const fs::path& filepath,
                    const std::string& node_to_focus,
@@ -207,6 +209,12 @@ public:
     void menu_set_items_recent_documents();
     void menu_set_visible_exit_app(bool visible);
     void menu_rebuild_toolbars(bool new_toolbar);
+    // Native application menubar (Gio::MenuModel exported through Gtk::Application::set_menubar,
+    // the global menu bar on macOS). Must be called once the window is added to the application.
+    void init_native_app_menubar();
+    bool native_app_menubar_active() const { return _nativeAppMenubarActive; }
+    void open_recent_doc(const std::string& filepath);
+    void remove_recent_doc(const std::string& filepath);
 #if GTKMM_MAJOR_VERSION >= 4
     void init_app_actions_gtk4();
 #endif /* GTKMM_MAJOR_VERSION >= 4 */
@@ -216,8 +224,15 @@ public:
     #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
     void show_hide_toolbars(bool visible)   { for (auto pToolbar : _pToolbars) pToolbar->property_visible() = visible; }
     void show_hide_menubar(bool visible)    {
-        if (visible) _pScrolledWindowMenuBar->set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_NEVER);
-        else _pScrolledWindowMenuBar->set_policy(Gtk::POLICY_EXTERNAL, Gtk::POLICY_EXTERNAL);
+        if (_pScrolledWindowMenuBar) {
+            if (visible) _pScrolledWindowMenuBar->set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_NEVER);
+            else _pScrolledWindowMenuBar->set_policy(Gtk::POLICY_EXTERNAL, Gtk::POLICY_EXTERNAL);
+        }
+        else {
+            // native application menubar (Gio::MenuModel): on macOS it lives in the global
+            // menu bar, elsewhere GtkApplicationWindow renders it inside the window
+            set_show_menubar(visible);
+        }
     }
     void set_toolbars_icon_size(int size)   { for (auto pToolbar: _pToolbars) pToolbar->property_icon_size() = CtMiscUtil::getIconSize(size); }
     #else
@@ -419,6 +434,7 @@ private:
 
     bool                _alwaysOnTop{false};
     bool                _startDialogShown{false};
+    bool                _nativeAppMenubarActive{false};
 
 public:
     // Unified signals for GTK3/GTK4

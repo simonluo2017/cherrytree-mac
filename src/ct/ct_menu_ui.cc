@@ -40,7 +40,7 @@ std::vector<std::string> CtMenu::_get_ui_str_toolbars()
                 if (pAction) {
                     if (isOpenRecent) str_buff += "<child><object class='GtkMenuToolButton' id='RecentDocs'>";
                     else str_buff += "<child><object class='GtkToolButton' id='" + *element + "'>";
-                    str_buff += "<property name='action-name'>win." + pAction->id + "</property>"; // 'win.' is a default action group in Window
+                    str_buff += "<property name='action-name'>" + CtMenu::gio_action_name(pAction->id) + "</property>"; // 'win.' is a default action group in Window
                     str_buff += "<property name='icon-name'>" + pAction->image + "</property>";
                     str_buff += "<property name='label'>" + pAction->name + "</property>";
                     std::string kb_shortcut = pAction->get_shortcut(_pCtConfig);
@@ -52,18 +52,13 @@ std::vector<std::string> CtMenu::_get_ui_str_toolbars()
                         tooltip = pAction->desc;
                     }
                     else {
-                        if (kb_shortcut.find(CtMenu::KB_CONTROL) != std::string::npos) {
-                            kb_shortcut = str::replace(kb_shortcut, CtMenu::KB_CONTROL, "Ctrl+");
-                        }
-                        if (kb_shortcut.find(CtMenu::KB_SHIFT) != std::string::npos) {
-                            kb_shortcut = str::replace(kb_shortcut, CtMenu::KB_SHIFT, "Shift+");
-                        }
-                        if (kb_shortcut.find(CtMenu::KB_ALT) != std::string::npos) {
-                            kb_shortcut = str::replace(kb_shortcut, CtMenu::KB_ALT, "Alt+");
-                        }
-                        if (kb_shortcut.find(CtMenu::KB_META) != std::string::npos) {
-                            kb_shortcut = str::replace(kb_shortcut, CtMenu::KB_META, "Meta+");
-                        }
+#if defined(__APPLE__)
+                        // with the native application menubar the shortcuts are bound to Command
+                        const bool macos_primary = _pCtConfig->nativeAppMenubar;
+#else
+                        const bool macos_primary = false;
+#endif
+                        kb_shortcut = CtMenu::shortcut_display(kb_shortcut, macos_primary);
                         tooltip = pAction->desc + " (" + str::xml_escape(kb_shortcut).c_str() + ")";
                     }
                     if (not tooltip.empty()) {

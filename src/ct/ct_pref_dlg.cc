@@ -396,16 +396,86 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
 
     Gtk::Frame* frame_misc = new_managed_frame_with_align(_("Miscellaneous"), vbox_misc);
 
+    // Appearance: native platform experience (system light/dark, native application menubar, chrome)
+    auto vbox_appearance = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_VERTICAL});
+    auto hbox_appearance_mode = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 6/*spacing*/});
+    auto label_appearance_mode = Gtk::manage(new Gtk::Label{_("Light/Dark Appearance")});
+#if GTKMM_MAJOR_VERSION >= 4
+    auto radiobutton_appearance_system = Gtk::manage(new Gtk::CheckButton{_("Follow System")});
+    auto radiobutton_appearance_light = Gtk::manage(new Gtk::CheckButton{_("Light")});
+    radiobutton_appearance_light->set_group(*radiobutton_appearance_system);
+    auto radiobutton_appearance_dark = Gtk::manage(new Gtk::CheckButton{_("Dark")});
+    radiobutton_appearance_dark->set_group(*radiobutton_appearance_system);
+    hbox_appearance_mode->append(*label_appearance_mode);
+    hbox_appearance_mode->append(*radiobutton_appearance_system);
+    hbox_appearance_mode->append(*radiobutton_appearance_light);
+    hbox_appearance_mode->append(*radiobutton_appearance_dark);
+#else
+    auto radiobutton_appearance_system = Gtk::manage(new Gtk::RadioButton{_("Follow System")});
+    auto radiobutton_appearance_light = Gtk::manage(new Gtk::RadioButton{_("Light")});
+    radiobutton_appearance_light->join_group(*radiobutton_appearance_system);
+    auto radiobutton_appearance_dark = Gtk::manage(new Gtk::RadioButton{_("Dark")});
+    radiobutton_appearance_dark->join_group(*radiobutton_appearance_system);
+    hbox_appearance_mode->pack_start(*label_appearance_mode, false, false);
+    hbox_appearance_mode->pack_start(*radiobutton_appearance_system, false, false);
+    hbox_appearance_mode->pack_start(*radiobutton_appearance_light, false, false);
+    hbox_appearance_mode->pack_start(*radiobutton_appearance_dark, false, false);
+#endif
+    radiobutton_appearance_system->set_active(0 == _pConfig->uiAppearance);
+    radiobutton_appearance_light->set_active(1 == _pConfig->uiAppearance);
+    radiobutton_appearance_dark->set_active(2 == _pConfig->uiAppearance);
+    auto checkbutton_native_chrome = Gtk::manage(new Gtk::CheckButton{_("Native Looking Sidebar, Toolbar and Status Bar")});
+    checkbutton_native_chrome->set_active(_pConfig->nativeChrome);
+    auto checkbutton_native_menubar = Gtk::manage(new Gtk::CheckButton{_("Native Application Menubar (Global Menu Bar on macOS)")});
+    checkbutton_native_menubar->set_active(_pConfig->nativeAppMenubar);
+    checkbutton_native_menubar->set_tooltip_text(_("The menu is exported by the application: on macOS it is the global menu bar with Command key shortcuts."));
+#if GTKMM_MAJOR_VERSION >= 4
+    vbox_appearance->append(*hbox_appearance_mode);
+    vbox_appearance->append(*checkbutton_native_chrome);
+    checkbutton_native_menubar->set_sensitive(false); // GTK4 always uses the menu model
+    vbox_appearance->append(*checkbutton_native_menubar);
+#else
+    vbox_appearance->pack_start(*hbox_appearance_mode, false, false);
+    vbox_appearance->pack_start(*checkbutton_native_chrome, false, false);
+    vbox_appearance->pack_start(*checkbutton_native_menubar, false, false);
+#endif
+    Gtk::Frame* frame_appearance = new_managed_frame_with_align(_("Appearance"), vbox_appearance);
+
     auto pMainBox = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_VERTICAL, 3/*spacing*/});
     pMainBox->set_margin_start(6);
     pMainBox->set_margin_top(6);
 #if GTKMM_MAJOR_VERSION >= 4
     pMainBox->append(*frame_fonts);
+    pMainBox->append(*frame_appearance);
     pMainBox->append(*frame_misc);
 #else
     pMainBox->pack_start(*frame_fonts, false, false);
+    pMainBox->pack_start(*frame_appearance, false, false);
     pMainBox->pack_start(*frame_misc, false, false);
 #endif
+
+    auto f_on_appearance_changed = [this](const int appearance) {
+        if (_pConfig->uiAppearance == appearance) return;
+        _pConfig->uiAppearance = appearance;
+        apply_for_each_window([](CtMainWin* win) { win->apply_ui_appearance(); });
+    };
+    radiobutton_appearance_system->signal_toggled().connect([radiobutton_appearance_system, f_on_appearance_changed](){
+        if (radiobutton_appearance_system->get_active()) f_on_appearance_changed(0);
+    });
+    radiobutton_appearance_light->signal_toggled().connect([radiobutton_appearance_light, f_on_appearance_changed](){
+        if (radiobutton_appearance_light->get_active()) f_on_appearance_changed(1);
+    });
+    radiobutton_appearance_dark->signal_toggled().connect([radiobutton_appearance_dark, f_on_appearance_changed](){
+        if (radiobutton_appearance_dark->get_active()) f_on_appearance_changed(2);
+    });
+    checkbutton_native_chrome->signal_toggled().connect([this, checkbutton_native_chrome](){
+        _pConfig->nativeChrome = checkbutton_native_chrome->get_active();
+        apply_for_each_window([](CtMainWin* win) { win->update_theme(); });
+    });
+    checkbutton_native_menubar->signal_toggled().connect([this, checkbutton_native_menubar](){
+        _pConfig->nativeAppMenubar = checkbutton_native_menubar->get_active();
+        need_restart(RESTART_REASON::NATIVE_MENUBAR);
+    });
 
     auto f_on_font_rt_set = [this, fontbutton_rt](){
 #if GTKMM_MAJOR_VERSION >= 4

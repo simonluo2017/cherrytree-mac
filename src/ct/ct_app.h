@@ -87,6 +87,7 @@ protected:
 protected:
     CtMainWin*  _create_window(const bool no_gui = false);
     CtMainWin*  _get_window_by_path(const std::string& filepath);
+    CtMainWin*  _get_active_main_win();
     bool        _quit_or_hide_window(CtMainWin* pCtMainWin, const bool fromDelete, const bool fromKillCallback);
     int         _on_handle_local_options(const Glib::RefPtr<Glib::VariantDict>& rOptions);
 

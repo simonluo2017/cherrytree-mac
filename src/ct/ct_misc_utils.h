@@ -269,6 +269,10 @@ std::string clean_from_chars_not_for_filename(std::string filename);
 
 Gtk::BuiltinIconSize getIconSize(int size);
 
+// true when the operating system is set to a dark appearance (macOS: 'defaults read -g AppleInterfaceStyle');
+// std::nullopt when the system appearance cannot be detected on this platform
+std::optional<bool> system_appearance_is_dark();
+
 void set_widget_margins(Gtk::Widget& widget, int top, int bottom, int left, int right);
 Gtk::Button* dialog_add_button(Gtk::Dialog* pDialog, const char* text, Gtk::ResponseType response, const char* stock_id, const bool isDefault = false);
 

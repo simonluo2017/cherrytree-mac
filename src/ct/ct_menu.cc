@@ -179,180 +179,12 @@ Gtk::MenuButton* CtMenu::build_menubutton_model4()
     return build_menubutton4();
 }
 
-Glib::RefPtr<Gio::Menu> CtMenu::_build_gio_menu4()
-{
-    _pGioMenuBar4 = Gio::Menu::create();
-    _pGioBookmarksMenu4.reset();
-    _pGioBookmarksSub4.reset();
-    _pGioRecentDocsSub4.reset();
-
-    auto extract_action_attr = [](const std::string& tag) -> std::string {
-        const std::size_t pos = tag.find("action=");
-        if (pos == std::string::npos || pos + 8 >= tag.size()) {
-            return {};
-        }
-        const char quote = tag[pos + 7];
-        if (quote != '\'' && quote != '"') {
-            return {};
-        }
-        const std::size_t value_start = pos + 8;
-        const std::size_t value_end = tag.find(quote, value_start);
-        if (value_end == std::string::npos) {
-            return {};
-        }
-        return tag.substr(value_start, value_end - value_start);
-    };
-
-    struct MenuFrame {
-        Glib::RefPtr<Gio::Menu> menu;
-        Glib::RefPtr<Gio::Menu> section;
-    };
-    auto ensure_section = [](MenuFrame& frame) {
-        if (not frame.section) {
-            frame.section = Gio::Menu::create();
-            frame.menu->append_section({}, frame.section);
-        }
-    };
-
-    std::vector<MenuFrame> stack;
-    const std::string markup{_get_ui_str_menu()};
-    std::size_t pos = 0;
-    while (true) {
-        const std::size_t lt = markup.find('<', pos);
-        if (lt == std::string::npos) {
-            break;
-        }
-        const std::size_t gt = markup.find('>', lt + 1);
-        if (gt == std::string::npos) {
-            break;
-        }
-        pos = gt + 1;
-
-        std::string tag = str::trim(markup.substr(lt + 1, gt - lt - 1));
-        if (tag.empty() || tag[0] == '!' || tag[0] == '?') {
-            continue;
-        }
-
-        const bool is_closing = tag[0] == '/';
-        bool self_closing = false;
-        if (not is_closing && tag.back() == '/') {
-            self_closing = true;
-            tag = str::trim(tag.substr(0, tag.size() - 1));
-        }
-
-        if (str::startswith(tag, "menubar") || str::startswith(tag, "/menubar")) {
-            continue;
-        }
-
-        if (str::startswith(tag, "separator")) {
-            if (not stack.empty()) {
-                stack.back().section.reset();
-                ensure_section(stack.back());
-            }
-            continue;
-        }
-
-        if (str::startswith(tag, "menuitem")) {
-            if (stack.empty()) {
-                continue;
-            }
-            const std::string action_id = extract_action_attr(tag);
-            CtMenuAction* action = action_id.empty() ? nullptr : find_action(action_id);
-            if (not action) {
-                continue;
-            }
-            ensure_section(stack.back());
-            stack.back().section->append(action->name, std::string("app.") + action->id);
-            continue;
-        }
-
-        if (str::startswith(tag, "/menu")) {
-            if (not stack.empty()) {
-                stack.pop_back();
-            }
-            continue;
-        }
-
-        if (str::startswith(tag, "menu")) {
-            const std::string action_id = extract_action_attr(tag);
-            if (action_id.empty()) {
-                continue;
-            }
-
-            CtMenuAction* action = find_action(action_id);
-            const Glib::ustring label = action ? Glib::ustring(action->name) : Glib::ustring(action_id);
-            auto submenu = Gio::Menu::create();
-
-            if (stack.empty()) {
-                _pGioMenuBar4->append_submenu(label, submenu);
-            }
-            else {
-                ensure_section(stack.back());
-                stack.back().section->append_submenu(label, submenu);
-            }
-
-            if (action_id == "BookmarksMenu")     { _pGioBookmarksMenu4 = submenu; }
-            else if (action_id == "BookmarksSubMenu") { _pGioBookmarksSub4  = submenu; }
-            else if (action_id == "RecentDocsSubMenu"){ _pGioRecentDocsSub4  = submenu; }
-
-            MenuFrame frame;
-            frame.menu = submenu;
-            ensure_section(frame);
-            stack.push_back(frame);
-
-            if (self_closing) {
-                stack.pop_back();
-            }
-        }
-    }
-
-    return _pGioMenuBar4;
-}
-
 Gtk::PopoverMenuBar* CtMenu::build_popover_menubar4()
 {
-    auto menu = _build_gio_menu4();
+    auto menu = build_gio_menubar(false/*reuse_existing*/);
     auto* bar = Gtk::manage(new Gtk::PopoverMenuBar(menu));
     bar->set_name("GioMenuBar");
     return bar;
-}
-
-void CtMenu::update_bookmarks_gio_menu4(const std::list<std::tuple<gint64, Glib::ustring, const char*>>& bookmarks)
-{
-    // Update both the top-level "Bookmarks" menu and the Tree > Bookmarks submenu
-    for (auto* gioMenu : {_pGioBookmarksMenu4.get(), _pGioBookmarksSub4.get()}) {
-        if (not gioMenu) continue;
-        gioMenu->remove_all();
-        if (not bookmarks.empty()) {
-            for (const auto& bk : bookmarks) {
-                const gint64 node_id   = std::get<0>(bk);
-                const Glib::ustring& title = std::get<1>(bk);
-                auto item = Gio::MenuItem::create(title, "");
-                item->set_action_and_target("app.goto_bookmark",
-                    Glib::Variant<gint64>::create(node_id));
-                gioMenu->append_item(item);
-            }
-        }
-    }
-}
-
-void CtMenu::update_recent_docs_gio_menu4(const CtRecentDocsFilepaths& recentDocsFilepaths)
-{
-    if (not _pGioRecentDocsSub4) return;
-    _pGioRecentDocsSub4->remove_all();
-    if (not recentDocsFilepaths.empty()) {
-        int idx = 0;
-        for (const auto& path : recentDocsFilepaths) {
-            if (idx >= 10) break;
-            const std::string path_str = path.string();
-            const Glib::ustring filepath{path_str};
-            auto item = Gio::MenuItem::create(filepath, "");
-            item->set_action_and_target("app.open_recent_doc",
-                Glib::Variant<Glib::ustring>::create(filepath));
-            _pGioRecentDocsSub4->append_item(item);
-            ++idx;
-        }
-    }
 }
 
 Gtk::Popover* CtMenu::_build_actions_popover()
@@ -394,7 +226,7 @@ void CtMenu::refresh_shortcuts_gtk4()
         const std::string& shortcut = act.get_shortcut(_pCtConfig);
         std::vector<Glib::ustring> accels;
         if (not shortcut.empty()) accels.push_back(shortcut);
-        app->set_accels_for_action(std::string("app.") + act.id, accels);
+        app->set_accels_for_action(gio_action_name(act.id), accels);
     }
 }
 
@@ -553,6 +385,295 @@ Gtk::MenuButton* CtMenu::build_bookmarks_button4(std::list<std::tuple<gint64, Gl
 }
 #endif /* GTKMM_MAJOR_VERSION >= 4 */
 
+/*static*/ Glib::RefPtr<Gio::Menu>     CtMenu::_sGioMenuBar;
+/*static*/ Glib::RefPtr<Gio::Menu>     CtMenu::_sGioBookmarksMenu;
+/*static*/ Glib::RefPtr<Gio::Menu>     CtMenu::_sGioBookmarksSub;
+/*static*/ Glib::RefPtr<Gio::Menu>     CtMenu::_sGioRecentDocsSub;
+/*static*/ Glib::RefPtr<Gio::MenuItem> CtMenu::_sGioBookmarksTopItem;
+/*static*/ int                         CtMenu::_sGioBookmarksTopIndex{-1};
+/*static*/ bool                        CtMenu::_sGioBookmarksTopShown{true};
+
+/*static*/ const char* CtMenu::gio_action_prefix()
+{
+#if GTKMM_MAJOR_VERSION >= 4
+    return "app.";
+#else
+    return "win.";
+#endif
+}
+
+/*static*/ std::string CtMenu::gaction_name(const std::string& id)
+{
+    return str::replace(id, "_", "-");
+}
+
+/*static*/ std::string CtMenu::gio_action_name(const std::string& id)
+{
+    return gio_action_prefix() + gaction_name(id);
+}
+
+/*static*/ std::string CtMenu::to_primary_accel(const std::string& shortcut)
+{
+    // <Primary> is the platform primary accelerator: Command on macOS, Control elsewhere
+    return str::replace(shortcut, "<control>", "<Primary>");
+}
+
+/*static*/ std::string CtMenu::shortcut_display(const std::string& shortcut, const bool macos_primary)
+{
+    std::string ret{shortcut};
+    if (macos_primary) {
+        ret = str::replace(ret, "<control>", "⌘"/*⌘*/);
+        ret = str::replace(ret, "<Primary>", "⌘"/*⌘*/);
+        ret = str::replace(ret, "<meta>", "⌘"/*⌘*/);
+        ret = str::replace(ret, "<shift>", "⇧"/*⇧*/);
+        ret = str::replace(ret, "<alt>", "⌥"/*⌥*/);
+        // single letter keys are shown uppercase on macOS (⌘S)
+        if (not ret.empty()) {
+            const char last = ret.back();
+            if (last >= 'a' and last <= 'z' and (ret.size() == 1 or static_cast<unsigned char>(ret[ret.size()-2]) >= 0x80)) {
+                ret.back() = static_cast<char>(last - 'a' + 'A');
+            }
+        }
+    }
+    else {
+        ret = str::replace(ret, "<control>", "Ctrl+");
+        ret = str::replace(ret, "<Primary>", "Ctrl+");
+        ret = str::replace(ret, "<shift>", "Shift+");
+        ret = str::replace(ret, "<alt>", "Alt+");
+        ret = str::replace(ret, "<meta>", "Meta+");
+    }
+    return ret;
+}
+
+Glib::RefPtr<Gio::Menu> CtMenu::build_gio_menubar(const bool reuse_existing)
+{
+    if (reuse_existing and _sGioMenuBar) {
+        return _sGioMenuBar;
+    }
+    _sGioMenuBar = Gio::Menu::create();
+    _sGioBookmarksMenu.reset();
+    _sGioBookmarksSub.reset();
+    _sGioRecentDocsSub.reset();
+    _sGioBookmarksTopItem.reset();
+    _sGioBookmarksTopIndex = -1;
+    _sGioBookmarksTopShown = true;
+
+    const std::string prefix{gio_action_prefix()};
+
+    auto extract_action_attr = [](const std::string& tag) -> std::string {
+        const std::size_t pos = tag.find("action=");
+        if (pos == std::string::npos || pos + 8 >= tag.size()) {
+            return {};
+        }
+        const char quote = tag[pos + 7];
+        if (quote != '\'' && quote != '"') {
+            return {};
+        }
+        const std::size_t value_start = pos + 8;
+        const std::size_t value_end = tag.find(quote, value_start);
+        if (value_end == std::string::npos) {
+            return {};
+        }
+        return tag.substr(value_start, value_end - value_start);
+    };
+
+    struct MenuFrame {
+        Glib::RefPtr<Gio::Menu> menu;
+        Glib::RefPtr<Gio::Menu> section;
+    };
+    auto ensure_section = [](MenuFrame& frame) {
+        if (not frame.section) {
+            frame.section = Gio::Menu::create();
+            frame.menu->append_section({}, frame.section);
+        }
+    };
+
+    std::vector<MenuFrame> stack;
+    const std::string markup{_get_ui_str_menu()};
+    std::size_t pos = 0;
+    while (true) {
+        const std::size_t lt = markup.find('<', pos);
+        if (lt == std::string::npos) {
+            break;
+        }
+        const std::size_t gt = markup.find('>', lt + 1);
+        if (gt == std::string::npos) {
+            break;
+        }
+        pos = gt + 1;
+
+        std::string tag = str::trim(markup.substr(lt + 1, gt - lt - 1));
+        if (tag.empty() || tag[0] == '!' || tag[0] == '?') {
+            continue;
+        }
+
+        const bool is_closing = tag[0] == '/';
+        bool self_closing = false;
+        if (not is_closing && tag.back() == '/') {
+            self_closing = true;
+            tag = str::trim(tag.substr(0, tag.size() - 1));
+        }
+
+        if (str::startswith(tag, "menubar") || str::startswith(tag, "/menubar")) {
+            continue;
+        }
+
+        if (str::startswith(tag, "separator")) {
+            if (not stack.empty()) {
+                stack.back().section.reset();
+                ensure_section(stack.back());
+            }
+            continue;
+        }
+
+        if (str::startswith(tag, "menuitem")) {
+            if (stack.empty()) {
+                continue;
+            }
+            const std::string action_id = extract_action_attr(tag);
+            CtMenuAction* action = action_id.empty() ? nullptr : find_action(action_id);
+            if (not action) {
+                continue;
+            }
+            ensure_section(stack.back());
+            auto item = Gio::MenuItem::create(action->name, gio_action_name(action->id));
+            const std::string& shortcut = action->get_shortcut(_pCtConfig);
+            if (not shortcut.empty()) {
+                item->set_attribute_value("accel", Glib::Variant<Glib::ustring>::create(to_primary_accel(shortcut)));
+            }
+            stack.back().section->append_item(item);
+            continue;
+        }
+
+        if (str::startswith(tag, "/menu")) {
+            if (not stack.empty()) {
+                stack.pop_back();
+            }
+            continue;
+        }
+
+        if (str::startswith(tag, "menu")) {
+            const std::string action_id = extract_action_attr(tag);
+            if (action_id.empty()) {
+                continue;
+            }
+
+            CtMenuAction* action = find_action(action_id);
+            const Glib::ustring label = action ? Glib::ustring(action->name) : Glib::ustring(action_id);
+            auto submenu = Gio::Menu::create();
+
+            if (stack.empty()) {
+                if (action_id == "BookmarksMenu") {
+                    // the top level bookmarks menu is optional (bookmarksInTopMenu) so we keep
+                    // the item around to be able to remove/insert it from/into the menubar
+                    _sGioBookmarksTopIndex = _sGioMenuBar->get_n_items();
+                    _sGioBookmarksTopItem = Gio::MenuItem::create(label, Glib::RefPtr<Gio::MenuModel>{submenu});
+                    _sGioMenuBar->append_item(_sGioBookmarksTopItem);
+                }
+                else {
+                    _sGioMenuBar->append_submenu(label, submenu);
+                }
+            }
+            else {
+                ensure_section(stack.back());
+                stack.back().section->append_submenu(label, submenu);
+            }
+
+            if (action_id == "BookmarksMenu")     { _sGioBookmarksMenu = submenu; }
+            else if (action_id == "BookmarksSubMenu") { _sGioBookmarksSub  = submenu; }
+            else if (action_id == "RecentDocsSubMenu"){ _sGioRecentDocsSub  = submenu; }
+
+            MenuFrame frame;
+            frame.menu = submenu;
+            ensure_section(frame);
+            stack.push_back(frame);
+
+            if (self_closing) {
+                stack.pop_back();
+            }
+        }
+    }
+
+    return _sGioMenuBar;
+}
+
+void CtMenu::update_bookmarks_gio_menu(const std::list<std::tuple<gint64, Glib::ustring, const char*>>& bookmarks)
+{
+    const std::string prefix{gio_action_prefix()};
+    auto append_action_item = [this, &prefix](const Glib::RefPtr<Gio::Menu>& section, const char* action_id) {
+        if (CtMenuAction* action = find_action(action_id)) {
+            auto item = Gio::MenuItem::create(action->name, gio_action_name(action->id));
+            const std::string& shortcut = action->get_shortcut(_pCtConfig);
+            if (not shortcut.empty()) {
+                item->set_attribute_value("accel", Glib::Variant<Glib::ustring>::create(to_primary_accel(shortcut)));
+            }
+            section->append_item(item);
+        }
+    };
+    // Update both the top-level "Bookmarks" menu and the Tree > Bookmarks submenu
+    for (const bool isTopMenu : {true, false}) {
+        Glib::RefPtr<Gio::Menu> gioMenu = isTopMenu ? _sGioBookmarksMenu : _sGioBookmarksSub;
+        if (not gioMenu) continue;
+        gioMenu->remove_all();
+        if (isTopMenu) {
+            auto sectionToggle = Gio::Menu::create();
+            append_action_item(sectionToggle, "node_bookmark");
+            append_action_item(sectionToggle, "node_unbookmark");
+            gioMenu->append_section({}, sectionToggle);
+        }
+        auto sectionHandle = Gio::Menu::create();
+        append_action_item(sectionHandle, "handle_bookmarks");
+        gioMenu->append_section({}, sectionHandle);
+        if (not bookmarks.empty()) {
+            auto sectionBookmarks = Gio::Menu::create();
+            for (const auto& bk : bookmarks) {
+                const gint64 node_id   = std::get<0>(bk);
+                const Glib::ustring& title = std::get<1>(bk);
+                auto item = Gio::MenuItem::create(title, "");
+                item->set_action_and_target(prefix + "goto-bookmark", Glib::Variant<gint64>::create(node_id));
+                sectionBookmarks->append_item(item);
+            }
+            gioMenu->append_section({}, sectionBookmarks);
+        }
+    }
+}
+
+void CtMenu::update_recent_docs_gio_menu(const CtRecentDocsFilepaths& recentDocsFilepaths)
+{
+    if (not _sGioRecentDocsSub) return;
+    const std::string prefix{gio_action_prefix()};
+    _sGioRecentDocsSub->remove_all();
+    if (recentDocsFilepaths.empty()) return;
+    auto sectionOpen = Gio::Menu::create();
+    auto removeSubmenu = Gio::Menu::create();
+    for (const fs::path& path : recentDocsFilepaths) {
+        const Glib::ustring filepath{path.string()};
+        auto itemOpen = Gio::MenuItem::create(filepath, "");
+        itemOpen->set_action_and_target(prefix + "open-recent-doc", Glib::Variant<Glib::ustring>::create(filepath));
+        sectionOpen->append_item(itemOpen);
+        auto itemRm = Gio::MenuItem::create(filepath, "");
+        itemRm->set_action_and_target(prefix + "remove-recent-doc", Glib::Variant<Glib::ustring>::create(filepath));
+        removeSubmenu->append_item(itemRm);
+    }
+    _sGioRecentDocsSub->append_section({}, sectionOpen);
+    auto sectionRemove = Gio::Menu::create();
+    sectionRemove->append_submenu(_("Remove from list"), removeSubmenu);
+    _sGioRecentDocsSub->append_section({}, sectionRemove);
+}
+
+void CtMenu::set_bookmarks_top_gio_menu_visible(const bool visible)
+{
+    if (not _sGioMenuBar or not _sGioBookmarksTopItem or _sGioBookmarksTopIndex < 0) return;
+    if (visible == _sGioBookmarksTopShown) return;
+    if (visible) {
+        _sGioMenuBar->insert_item(_sGioBookmarksTopIndex, _sGioBookmarksTopItem);
+    }
+    else {
+        _sGioMenuBar->remove(_sGioBookmarksTopIndex);
+    }
+    _sGioBookmarksTopShown = visible;
+}
+
 #if GTKMM_MAJOR_VERSION < 4
 static xmlpp::Attribute* get_attribute(xmlpp::Node* pNode, char const* name)
 {
@@ -669,6 +790,7 @@ std::vector<Gtk::Toolbar*> CtMenu::build_toolbars(Gtk::MenuToolButton*& pRecentD
         Gtk::Toolbar* pToolbar = nullptr;
         _rGtkBuilder->add_from_string(toolbar_str);
         _rGtkBuilder->get_widget("ToolBar" + std::to_string(toolbars.size()), pToolbar);
+        pToolbar->get_style_context()->add_class("ct-main-toolbar");
         toolbars.push_back(pToolbar);
         if (not pRecentDocsMenuToolButton) {
             _rGtkBuilder->get_widget("RecentDocs", pRecentDocsMenuToolButton);

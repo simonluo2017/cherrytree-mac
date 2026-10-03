@@ -153,6 +153,23 @@ CtApp::CtApp(const Glib::ustring application_id_postfix, Gio::ApplicationFlags f
     });
     add_action(focus_node_action);
 
+    // Standard application actions. On macOS GTK looks for "about", "preferences" and "quit"
+    // to populate the native application menu (CherryTree > About / Preferences… / Quit),
+    // like any Cocoa application.
+    add_action("about", [this]() {
+        if (CtMainWin* pWin = _get_active_main_win()) {
+            pWin->get_ct_actions()->dialog_about();
+        }
+    });
+    add_action("preferences", [this]() {
+        if (CtMainWin* pWin = _get_active_main_win()) {
+            pWin->get_ct_actions()->dialog_preferences();
+        }
+    });
+    add_action("quit", [this]() {
+        close_all_windows(false/*fromKillCallback*/);
+    });
+
     _add_main_option_entries();
     signal_handle_local_options().connect(sigc::mem_fun(*this, &CtApp::_on_handle_local_options), false);
 
@@ -431,6 +448,8 @@ CtMainWin* CtApp::_create_window(const bool no_gui)
 #endif /* GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED) */
                                           _pGtkSourceLanguageManager};
     add_window(*pCtMainWin);
+    // native application menubar (Gio::MenuModel), needs the window to be in the application
+    pCtMainWin->init_native_app_menubar();
 
     pCtMainWin->connect_app_new_instance([this]() {
         auto win = _create_window();
@@ -584,6 +603,22 @@ void CtApp::systray_show_hide_windows()
     }
 }
 #endif /* GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED) */
+
+CtMainWin* CtApp::_get_active_main_win()
+{
+    CtMainWin* pFallback{nullptr};
+    for (Gtk::Window* pWin : get_windows()) {
+        if (CtMainWin* pCtMainWin = dynamic_cast<CtMainWin*>(pWin)) {
+            if (pWin->is_active()) {
+                return pCtMainWin;
+            }
+            if (not pFallback or pWin->get_visible()) {
+                pFallback = pCtMainWin;
+            }
+        }
+    }
+    return pFallback;
+}
 
 void CtApp::close_all_windows(const bool fromKillCallback)
 {

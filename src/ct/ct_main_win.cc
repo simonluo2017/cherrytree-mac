@@ -12,8 +12,9 @@ void CtMainWin::init_app_actions_gtk4()
     for (const auto& act : _uCtMenu->get_actions()) {
         if (act.id.empty()) continue;
 
-        if (not app->lookup_action(act.id)) {
-            auto simple = Gio::SimpleAction::create(act.id);
+        const std::string gaction_name = CtMenu::gaction_name(act.id);
+        if (not app->lookup_action(gaction_name)) {
+            auto simple = Gio::SimpleAction::create(gaction_name);
             simple->signal_activate().connect([this, action_id = act.id](const Glib::VariantBase&){
                 if (auto a = _uCtMenu->find_action(action_id)) {
                     if (a->run_action) a->run_action();
@@ -26,14 +27,14 @@ void CtMainWin::init_app_actions_gtk4()
         const std::string& shortcut = act.get_shortcut(_pCtConfig);
         std::vector<Glib::ustring> accels;
         if (not shortcut.empty()) accels.push_back(shortcut);
-        app->set_accels_for_action(std::string("app.") + act.id, accels);
+        app->set_accels_for_action(CtMenu::gio_action_name(act.id), accels);
     }
 
     // Parameterised action: navigate to a bookmarked node.
     // Used by Gio::Menu bookmark entries (app.goto_bookmark(<node_id>)).
-    if (not app->lookup_action("goto_bookmark")) {
+    if (not app->lookup_action("goto-bookmark")) {
         auto goto_bm = Gio::SimpleAction::create(
-            "goto_bookmark", Glib::VARIANT_TYPE_INT64);
+            "goto-bookmark", Glib::VARIANT_TYPE_INT64);
         goto_bm->signal_activate().connect([this](const Glib::VariantBase& param){
             const gint64 node_id =
                 Glib::VariantBase::cast_dynamic<Glib::Variant<gint64>>(param).get();
@@ -45,15 +46,27 @@ void CtMainWin::init_app_actions_gtk4()
 
     // Parameterised action: open a recent document.
     // Used by Gio::Menu recent-docs entries (app.open_recent_doc(<filepath>)).
-    if (not app->lookup_action("open_recent_doc")) {
+    if (not app->lookup_action("open-recent-doc")) {
         auto open_recent = Gio::SimpleAction::create(
-            "open_recent_doc", Glib::VARIANT_TYPE_STRING);
+            "open-recent-doc", Glib::VARIANT_TYPE_STRING);
         open_recent->signal_activate().connect([this](const Glib::VariantBase& param){
             const Glib::ustring filepath =
                 Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(param).get();
             file_open(std::string(filepath), "", "", "", true);
         });
         app->add_action(open_recent);
+    }
+
+    // Parameterised action: remove a document from the recent documents list.
+    if (not app->lookup_action("remove-recent-doc")) {
+        auto remove_recent = Gio::SimpleAction::create(
+            "remove-recent-doc", Glib::VARIANT_TYPE_STRING);
+        remove_recent->signal_activate().connect([this](const Glib::VariantBase& param){
+            const Glib::ustring filepath =
+                Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(param).get();
+            remove_recent_doc(std::string(filepath));
+        });
+        app->add_action(remove_recent);
     }
 }
 #endif /* GTKMM_MAJOR_VERSION >= 4 */
@@ -200,13 +213,23 @@ CtMainWin::CtMainWin(bool                            no_gui,
     _vPaned.property_wide_handle() = true;
 
 #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
-    _pMenuBar = _uCtMenu->build_menubar();
-    _pScrolledWindowMenuBar = Gtk::manage(new Gtk::ScrolledWindow{});
-    _pScrolledWindowMenuBar->add(*_pMenuBar);
-    _pMenuBar->set_name("MenuBar");
-    _resolve_bookmarks_submenus();
-    _pRecentDocsSubmenu = CtMenu::find_menu_item(_pMenuBar, "RecentDocsSubMenu");
-    _pMenuBar->show_all();
+    _nativeAppMenubarActive = _pCtConfig->nativeAppMenubar;
+    if (_nativeAppMenubarActive) {
+        // native application menubar: a Gio::MenuModel exported by the application
+        // (global menu bar on macOS), the in-window GtkMenuBar is not built at all.
+        // The model and the accelerators are set up in init_native_app_menubar() once the
+        // window has been added to the application.
+        _resolve_bookmarks_submenus();
+    }
+    else {
+        _pMenuBar = _uCtMenu->build_menubar();
+        _pScrolledWindowMenuBar = Gtk::manage(new Gtk::ScrolledWindow{});
+        _pScrolledWindowMenuBar->add(*_pMenuBar);
+        _pMenuBar->set_name("MenuBar");
+        _resolve_bookmarks_submenus();
+        _pRecentDocsSubmenu = CtMenu::find_menu_item(_pMenuBar, "RecentDocsSubMenu");
+        _pMenuBar->show_all();
+    }
     add_accel_group(_uCtMenu->get_accel_group());
     _pToolbars = _uCtMenu->build_toolbars(_pRecentDocsMenuToolButton, _pSaveToolButton);
 #else
@@ -223,7 +246,9 @@ CtMainWin::CtMainWin(bool                            no_gui,
     #endif
         _pHeaderBar->pack_start(*Gtk::manage(new Gtk::Label{" "}));
 #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
-        _pHeaderBar->pack_start(*_pScrolledWindowMenuBar);
+        if (_pScrolledWindowMenuBar) {
+            _pHeaderBar->pack_start(*_pScrolledWindowMenuBar);
+        }
 #else
     _pHeaderBar->pack_start(*_pPopoverMenuBar4);
     _pPopoverMenuBar4->show();
@@ -239,7 +264,9 @@ CtMainWin::CtMainWin(bool                            no_gui,
     }
     else {
 #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
-        _vboxMain.pack_start(*_pScrolledWindowMenuBar, false, false);
+        if (_pScrolledWindowMenuBar) {
+            _vboxMain.pack_start(*_pScrolledWindowMenuBar, false, false);
+        }
 #else
     _vboxMain.append(*_pPopoverMenuBar4);
     _pPopoverMenuBar4->show();
@@ -258,7 +285,7 @@ CtMainWin::CtMainWin(bool                            no_gui,
     }
     // Initial population of recent docs (toolbar dropdown + Gio::Menu recent-docs submenu)
     _uCtMenu->populate_recent_docs_menu4(_pRecentDocsMenuButton4, _pCtConfig->recentDocsFilepaths);
-    _uCtMenu->update_recent_docs_gio_menu4(_pCtConfig->recentDocsFilepaths);
+    _uCtMenu->update_recent_docs_gio_menu(_pCtConfig->recentDocsFilepaths);
 #endif
     // Main layout assembly
 #if GTKMM_MAJOR_VERSION >= 4
@@ -681,13 +708,14 @@ void CtMainWin::config_apply()
 //        Gtk::Settings::get_default()->property_gtk_overlay_scrolling() = _pCtConfig->overlayScroll;
         _scrolledwindowText.set_overlay_scrolling(static_cast<bool>(_pCtConfig->overlayScroll));
     }
+    apply_ui_appearance();
     update_theme();
 #if GTKMM_MAJOR_VERSION >= 4
     // Refresh shortcuts — works globally, no menu open needed
     _uCtMenu->refresh_shortcuts_gtk4();
     // Repopulate recent docs (toolbar dropdown + Gio::Menu) and bookmarks after config apply
     _uCtMenu->populate_recent_docs_menu4(_pRecentDocsMenuButton4, _pCtConfig->recentDocsFilepaths);
-    _uCtMenu->update_recent_docs_gio_menu4(_pCtConfig->recentDocsFilepaths);
+    _uCtMenu->update_recent_docs_gio_menu(_pCtConfig->recentDocsFilepaths);
     menu_set_bookmark_menu_items();
 #endif
 }
@@ -696,6 +724,28 @@ void CtMainWin::config_update_data_from_curr_status()
 {
     _ensure_curr_doc_in_recent_docs();
     _ctTextview.synch_spell_check_change_from_gspell_right_click_menu();
+}
+
+void CtMainWin::apply_ui_appearance()
+{
+    Glib::RefPtr<Gtk::Settings> pSettings = Gtk::Settings::get_default();
+    if (not pSettings) return;
+    // the value found at startup is what the platform/theme asked for: used by "System"
+    // on the platforms where the appearance cannot be queried (and to undo a previous choice)
+    static const bool startupPreferDark = pSettings->property_gtk_application_prefer_dark_theme();
+    bool preferDark{startupPreferDark};
+    if (1 == _pCtConfig->uiAppearance) {
+        preferDark = false;
+    }
+    else if (2 == _pCtConfig->uiAppearance) {
+        preferDark = true;
+    }
+    else if (const std::optional<bool> systemDark = CtMiscUtil::system_appearance_is_dark()) {
+        preferDark = systemDark.value();
+    }
+    if (pSettings->property_gtk_application_prefer_dark_theme() != preferDark) {
+        pSettings->property_gtk_application_prefer_dark_theme() = preferDark;
+    }
 }
 
 void CtMainWin::update_theme()
@@ -807,6 +857,35 @@ void CtMainWin::update_theme()
     css_str += ".ct-toolbar4 separator.ct-toolbar4-separator { margin: 0px 3px 0px 3px; min-width: 1px; } ";
 #endif
     css_str += "textview border { background-color: transparent; } "; // Loss of transparency with PNGs (#1402, #2132)
+    if (_pCtConfig->nativeChrome) {
+        // Platform native looking window chrome, inspired by the macOS sidebar/toolbar design
+        // (the colours come from the GTK theme named colours so that light/dark are both covered)
+#if defined(__APPLE__)
+        css_str += ".ct-app-win { font-family: -apple-system, \"SF Pro Text\", \"Helvetica Neue\", sans-serif; } ";
+#endif // __APPLE__
+        // sidebar (tree explorer): source list look, rounded selection, hairline separator from the editor
+        css_str += ".ct-tree-panel:selected { border-radius: 5px; } ";
+        css_str += std::string{".ct-tree-scroll-panel { "} + (_pCtConfig->treeRightSide ? "border-left" : "border-right") + ": 1px solid alpha(@borders, 0.7); } ";
+        // node name header: title strip with pill shaped breadcrumb buttons
+        css_str += ".ct-header-panel { padding: 3px 6px; border-bottom: 1px solid alpha(@borders, 0.7); } ";
+        css_str += ".ct-header-panel button { border-radius: 6px; border: 1px solid transparent; background-image: none; background-color: transparent; box-shadow: none; text-shadow: none; padding: 1px 8px; margin: 1px 2px; } ";
+        css_str += ".ct-header-panel button:hover { background-color: alpha(@theme_fg_color, 0.08); } ";
+        css_str += ".ct-header-panel button:active { background-color: alpha(@theme_fg_color, 0.16); } ";
+        // toolbar: flat, rounded, with a hairline below
+        css_str += "toolbar.ct-main-toolbar { padding: 3px 6px; border-bottom: 1px solid alpha(@borders, 0.7); } ";
+        css_str += "toolbar.ct-main-toolbar button { border-radius: 6px; border: 1px solid transparent; background-image: none; background-color: transparent; box-shadow: none; text-shadow: none; padding: 3px; min-width: 22px; min-height: 22px; margin: 0px 1px; } ";
+        css_str += "toolbar.ct-main-toolbar button:hover { background-color: alpha(@theme_fg_color, 0.08); } ";
+        css_str += "toolbar.ct-main-toolbar button:active, toolbar.ct-main-toolbar button:checked { background-color: alpha(@theme_fg_color, 0.16); } ";
+        css_str += "toolbar.ct-main-toolbar button:disabled { background-color: transparent; } ";
+        css_str += "toolbar.ct-main-toolbar separator { background-color: alpha(@borders, 0.9); background-image: none; border: none; min-width: 1px; margin: 5px 5px; } ";
+        // status bar: quiet, hairline above
+        css_str += ".ct-status-bar { border-top: 1px solid alpha(@borders, 0.7); padding: 0px 4px; } ";
+        css_str += ".ct-status-bar label { color: alpha(@theme_fg_color, 0.8); } ";
+        // paned handles: thin hairlines instead of the wide grooves
+        css_str += ".ct-app-win paned > separator { background-image: none; background-color: alpha(@borders, 0.7); border: none; min-width: 1px; min-height: 1px; margin: 0px; } ";
+        css_str += ".ct-app-win paned.wide > separator { background-image: none; background-color: transparent; border: none; margin: 0px; } ";
+        css_str += ".ct-app-win paned.wide > separator:hover { background-color: alpha(@theme_selected_bg_color, 0.4); } ";
+    }
     //printf("css_str_len=%zu\n", css_str.size());
 
     if (_css_provider_theme) {
@@ -1114,6 +1193,9 @@ void CtMainWin::menu_top_optional_bookmarks_enforce()
     if (pBookmarksMenu) {
         pBookmarksMenu->set_visible(_pCtConfig->bookmarksInTopMenu);
     }
+    if (_nativeAppMenubarActive) {
+        _uCtMenu->set_bookmarks_top_gio_menu_visible(_pCtConfig->bookmarksInTopMenu);
+    }
 #else
     // GTK4: bookmark visibility handled differently
 #endif
@@ -1239,6 +1321,9 @@ void CtMainWin::menu_set_bookmark_menu_items()
             _pBookmarksSubmenus[i]->set_submenu(*_uCtMenu->build_bookmarks_menu(bookmarks, bookmark_action, 2 == i/*isTopMenu*/));
         }
     }
+    if (_nativeAppMenubarActive) {
+        _uCtMenu->update_bookmarks_gio_menu(bookmarks);
+    }
     #else
     // GTK4: update both the top-level Bookmarks menu and the Tree > Bookmarks submenu
     // via the Gio::Menu references captured during build_popover_menubar4().
@@ -1251,32 +1336,104 @@ void CtMainWin::menu_set_bookmark_menu_items()
                 ct_tree_iter.get_node_syntax_highlighting(),
                 ct_tree_iter.get_node_custom_icon_id())));
     }
-    _uCtMenu->update_bookmarks_gio_menu4(bookmarks);
+    _uCtMenu->update_bookmarks_gio_menu(bookmarks);
     #endif
+}
+
+void CtMainWin::open_recent_doc(const std::string& filepath)
+{
+    if (Glib::file_test(filepath, Glib::FILE_TEST_EXISTS)) {
+        if (file_open(filepath, ""/*node*/, ""/*anchor*/)) {
+            _pCtConfig->recentDocsFilepaths.move_or_push_front(fs_canonicalize_filename(filepath));
+            menu_set_items_recent_documents();
+        }
+    }
+    else {
+        g_autofree gchar* title = g_strdup_printf(_("The Path %s does Not Exist"), str::xml_escape(filepath).c_str());
+        CtDialogs::error_dialog(Glib::ustring{title}, *this);
+        _pCtConfig->recentDocsFilepaths.move_or_push_back(fs_canonicalize_filename(filepath));
+        menu_set_items_recent_documents();
+    }
+}
+
+void CtMainWin::remove_recent_doc(const std::string& filepath)
+{
+    _pCtConfig->recentDocsFilepaths.remove(filepath);
+    menu_set_items_recent_documents();
+}
+
+void CtMainWin::init_native_app_menubar()
+{
+#if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
+    if (not _nativeAppMenubarActive) return;
+    Glib::RefPtr<Gtk::Application> rApp = get_application();
+    if (not rApp) {
+        spdlog::warn("{} no application", __FUNCTION__);
+        return;
+    }
+    // parameterised window actions used by the dynamic sections of the menu model
+    if (not lookup_action("goto-bookmark")) {
+        add_action_with_parameter("goto-bookmark", Glib::VARIANT_TYPE_INT64, [this](const Glib::VariantBase& param){
+            const gint64 node_id = Glib::VariantBase::cast_dynamic<Glib::Variant<gint64>>(param).get();
+            if (CtTreeIter tree_iter = get_tree_store().get_node_from_node_id(node_id)) {
+                _uCtTreeview->set_cursor_safe(tree_iter);
+            }
+            _ctTextview.mm().grab_focus();
+        });
+        add_action_with_parameter("open-recent-doc", Glib::VARIANT_TYPE_STRING, [this](const Glib::VariantBase& param){
+            const Glib::ustring filepath = Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(param).get();
+            open_recent_doc(filepath);
+        });
+        add_action_with_parameter("remove-recent-doc", Glib::VARIANT_TYPE_STRING, [this](const Glib::VariantBase& param){
+            const Glib::ustring filepath = Glib::VariantBase::cast_dynamic<Glib::Variant<Glib::ustring>>(param).get();
+            remove_recent_doc(filepath);
+        });
+    }
+    // one shared menu model for all the windows of the application
+    Glib::RefPtr<Gio::Menu> rMenuModel = _uCtMenu->build_gio_menubar(true/*reuse_existing*/);
+    if (not rApp->get_menubar()) {
+        rApp->set_menubar(rMenuModel);
+    }
+    spdlog::debug("{} items={} shell_shows_menubar={}", __FUNCTION__, rMenuModel->get_n_items(),
+                  static_cast<bool>(Gtk::Settings::get_default()->property_gtk_shell_shows_menubar()));
+    // application wide accelerators bound to the window actions ("win.<id>"): <Primary> is
+    // Command on macOS and Control elsewhere; they work with no menu open and no GtkMenuBar
+    for (const CtMenuAction& action : _uCtMenu->get_actions()) {
+        if (action.id.empty()) continue;
+        const std::string& shortcut = action.get_shortcut(_pCtConfig);
+        std::vector<Glib::ustring> accels;
+        if (not shortcut.empty()) {
+            accels.push_back(CtMenu::to_primary_accel(shortcut));
+        }
+#if defined(__APPLE__)
+        // standard macOS key equivalents in addition to the configured shortcuts
+        if ("preferences_dlg" == action.id) accels.push_back("<Primary>comma");
+        else if ("toggle_fullscreen" == action.id) accels.push_back("<Primary><Control>f");
+        else if ("ct_help" == action.id) accels.push_back("<Primary>question");
+#endif // __APPLE__
+        rApp->set_accels_for_action(CtMenu::gio_action_name(action.id), accels);
+    }
+    show_hide_menubar(_pCtConfig->menubarVisible);
+    menu_set_items_recent_documents();
+    menu_set_bookmark_menu_items();
+    menu_top_optional_bookmarks_enforce();
+    menu_update_doc_path_menu_item();
+#endif /* GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED) */
 }
 
 void CtMainWin::menu_set_items_recent_documents()
 {
     if (not _pCtConfig->rememberRecentDocs) return;
     #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
-    sigc::slot<void, const std::string&> recent_doc_open_action = [&](const std::string& filepath){
-        if (Glib::file_test(filepath, Glib::FILE_TEST_EXISTS)) {
-            if (file_open(filepath, ""/*node*/, ""/*anchor*/)) {
-                _pCtConfig->recentDocsFilepaths.move_or_push_front(fs_canonicalize_filename(filepath));
-                menu_set_items_recent_documents();
-            }
-        }
-        else {
-            g_autofree gchar* title = g_strdup_printf(_("The Path %s does Not Exist"), str::xml_escape(filepath).c_str());
-            CtDialogs::error_dialog(Glib::ustring{title}, *this);
-            _pCtConfig->recentDocsFilepaths.move_or_push_back(fs_canonicalize_filename(filepath));
-            menu_set_items_recent_documents();
-        }
+    sigc::slot<void, const std::string&> recent_doc_open_action = [this](const std::string& filepath){
+        open_recent_doc(filepath);
     };
-    sigc::slot<void, const std::string&> recent_doc_rm_action = [&](const std::string& filepath){
-        _pCtConfig->recentDocsFilepaths.remove(filepath);
-        menu_set_items_recent_documents();
+    sigc::slot<void, const std::string&> recent_doc_rm_action = [this](const std::string& filepath){
+        remove_recent_doc(filepath);
     };
+    if (_nativeAppMenubarActive) {
+        _uCtMenu->update_recent_docs_gio_menu(_pCtConfig->recentDocsFilepaths);
+    }
     if (_pRecentDocsSubmenu) {
         Gtk::Menu* pMenu = _pRecentDocsSubmenu->get_submenu();
         delete pMenu;
@@ -1295,13 +1452,20 @@ void CtMainWin::menu_set_items_recent_documents()
     #else
     // GTK4: update both the toolbar recent-docs dropdown and the Gio::Menu recent-docs submenu.
     _uCtMenu->populate_recent_docs_menu4(_pRecentDocsMenuButton4, _pCtConfig->recentDocsFilepaths);
-    _uCtMenu->update_recent_docs_gio_menu4(_pCtConfig->recentDocsFilepaths);
+    _uCtMenu->update_recent_docs_gio_menu(_pCtConfig->recentDocsFilepaths);
     #endif
 }
 
 void CtMainWin::menu_set_visible_exit_app(bool visible)
 {
 #if GTKMM_MAJOR_VERSION < 4
+    if (not _pMenuBar) {
+        // native application menubar: the menu model cannot hide items, the action is disabled instead
+        if (auto pAction = _uCtMenu->find_action("exit_app")) {
+            if (pAction->signal_set_visible) pAction->signal_set_visible->emit(visible);
+        }
+        return;
+    }
     if (auto quit_label = CtMenu::get_accel_label(CtMenu::find_menu_item(_pMenuBar, "quit_app"))) {
         quit_label->set_label(visible ? _("_Hide") : _("_Quit"));
         quit_label->set_tooltip_markup(visible ?  _("Hide the Window") : _("Quit the Application"));

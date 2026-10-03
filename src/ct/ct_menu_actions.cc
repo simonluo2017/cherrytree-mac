@@ -538,8 +538,22 @@ void CtMenu::init_actions(CtActions* pActions)
         // add actions in the Windows for the toolbar
         // by default actions will have prefix 'win.'
         // (the menu uses not actions, but accelerators)
-        for (const CtMenuAction& action : _actions) {
-            pActions->getCtMainWin()->add_action(action.id, action.run_action);
+        for (CtMenuAction& action : _actions) {
+            Glib::RefPtr<Gio::SimpleAction> rSimpleAction = pActions->getCtMainWin()->add_action(CtMenu::gaction_name(action.id), action.run_action);
+#if GTKMM_MAJOR_VERSION < 4
+            // keep the Gio action (toolbar buttons, native application menubar) in sync with the
+            // sensitivity/visibility requested for the classic menu items: a Gio::MenuModel cannot
+            // hide single items, so a hidden action is exposed as a disabled one
+            auto pState = std::make_shared<std::pair<bool, bool>>(true/*sensitive*/, true/*visible*/);
+            action.signal_set_sensitive->connect([rSimpleAction, pState](bool sensitive){
+                pState->first = sensitive;
+                rSimpleAction->set_enabled(pState->first and pState->second);
+            });
+            action.signal_set_visible->connect([rSimpleAction, pState](bool visible){
+                pState->second = visible;
+                rSimpleAction->set_enabled(pState->first and pState->second);
+            });
+#endif /* GTKMM_MAJOR_VERSION < 4 */
         }
     }
     {

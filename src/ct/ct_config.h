@@ -86,6 +86,18 @@ public:
 #else
     bool                                        menubarInTitlebar{true};
 #endif
+    // Native application menu bar built from a Gio::MenuModel and exported via
+    // Gtk::Application::set_menubar(): on macOS this becomes the global menu bar
+    // (with the standard "CherryTree" application menu), like a native Cocoa app.
+#if defined(__APPLE__)
+    bool                                        nativeAppMenubar{true};
+#else
+    bool                                        nativeAppMenubar{false};
+#endif
+    // 0 = follow the system appearance, 1 = always light, 2 = always dark
+    int                                         uiAppearance{0};
+    // Platform-native looking window chrome (sidebar, node header, toolbar, status bar)
+    bool                                        nativeChrome{true};
     bool                                        showNodeNameHeader{true};
     int                                         nodesOnNodeNameHeader{3};
     int                                         maxMatchesInPage{500};
