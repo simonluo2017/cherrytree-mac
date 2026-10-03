@@ -201,6 +201,14 @@ Glib::ustring CtColumnEdit::cut()
 
 void CtColumnEdit::paste(const std::string& column_txt)
 {
+    // pasting over a column selection replaces it: remove the selected column first, then the
+    // rows are inserted as plain text with the column mode off
+    if (CtColEditState::PrEdit == _state) {
+        _predit_to_edit();
+    }
+    if (CtColEditState::Off != _state) {
+        column_mode_off();
+    }
     const std::vector<std::string> vec_col_rows = str::split(column_txt, "\n");
     Glib::RefPtr<Gtk::TextBuffer> pTextBuffer = _textView.get_buffer();
     Gtk::TextIter iterInsert = pTextBuffer->get_insert()->get_iter();
@@ -360,6 +368,7 @@ void CtColumnEdit::_edit_insert_delete(const bool isInsert)
 void CtColumnEdit::column_mode_off()
 {
     _kbActive = false;
+    _set_selecting_class(false);
     if (CtColEditState::Off != _state) {
         _state = CtColEditState::Off;
         _clear_marks();
@@ -371,6 +380,19 @@ void CtColumnEdit::column_mode_off()
     else {
         if (_ctrlDown) _ctrlDown = false;
         if (_altDown) _altDown = false;
+    }
+}
+
+void CtColumnEdit::_set_selecting_class(const bool on)
+{
+    // while the rectangle is being dragged the regular (contiguous) selection of the text view
+    // is made invisible through css (see CtTextView), only the rectangle overlay is painted
+    Glib::RefPtr<Gtk::StyleContext> rStyleContext = _textView.get_style_context();
+    if (on) {
+        if (not rStyleContext->has_class("ct-column-selecting")) rStyleContext->add_class("ct-column-selecting");
+    }
+    else if (rStyleContext->has_class("ct-column-selecting")) {
+        rStyleContext->remove_class("ct-column-selecting");
     }
 }
 
@@ -674,6 +696,7 @@ void CtColumnEdit::button_1_released()
     if ( CtColEditState::Selection != _state) {
         return;
     }
+    _set_selecting_class(false);
     bool unexpected{false};
     _state = CtColEditState::PrEdit;
     if ( _marksStart.size() > 0 and
@@ -743,6 +766,7 @@ void CtColumnEdit::selection_update()
         if (CtColEditState::Off == _state and _modifiers_allow_column_selection()) {
             _state = CtColEditState::Selection;
             _kbActive = false;
+            _set_selecting_class(true);
             if (_stateOnOffCallback) _stateOnOffCallback(true);
         }
         if (CtColEditState::Selection == _state and not _kbActive) {

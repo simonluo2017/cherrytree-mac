@@ -104,6 +104,16 @@ CtTextView::CtTextView(CtMainWin* pCtMainWin)
     // column selection with the keyboard (TextMate style): the keys are routed here by the
     // main window before its accelerators (see CtMainWin::_on_window_key_press_event)
     g_object_set_data(G_OBJECT(_pGtkSourceView), "CtTextView", this);
+    {
+        // while a column is being selected with the mouse, hide the regular contiguous
+        // selection highlight: only the rectangle painted by CtColumnEdit is shown
+        static Glib::RefPtr<Gtk::CssProvider> rColumnSelCss;
+        if (not rColumnSelCss) {
+            rColumnSelCss = Gtk::CssProvider::create();
+            rColumnSelCss->load_from_data("textview.ct-column-selecting text selection { background-color: transparent; color: inherit; } ");
+            Gtk::StyleContext::add_provider_for_screen(Gdk::Screen::get_default(), rColumnSelCss, GTK_STYLE_PROVIDER_PRIORITY_USER);
+        }
+    }
     _sigcConnections.push_back(_pTextView->signal_key_press_event().connect([this](GdkEventKey* pEventKey)->bool{
         return column_edit_handle_key_press(pEventKey);
     }, false));
@@ -113,7 +123,8 @@ CtTextView::CtTextView(CtMainWin* pCtMainWin)
         return false; /*propagate*/
     }, true/*after*/));
     _sigcConnections.push_back(_pTextView->signal_focus_out_event().connect([this](GdkEventFocus*/*gdk_event*/){
-        _columnEdit.column_mode_off();
+        // the column selection survives a focus out (context menu, dialogs, the tree): it is
+        // ended when the cursor is moved elsewhere (see CtColumnEdit::selection_update) or with Esc
         _set_highlight_current_line_enabled(false);
         return false; /*propagate event*/
     }, false));
@@ -538,7 +549,8 @@ void CtTextView::for_event_after_button_press(GdkEvent* event)
             }
         }
     }
-    else if (event->button.button == 3 and not text_buffer->get_has_selection()) {
+    else if (event->button.button == 3 and not text_buffer->get_has_selection() and CtColEditState::Off == _columnEdit.get_state()) {
+        // (with a column selection active the right click must not move the cursor, that would end it)
         int x, y;
         _pTextView->window_to_buffer_coords(Gtk::TEXT_WINDOW_TEXT, (int)event->button.x, (int)event->button.y, x, y);
         Gtk::TextIter text_iter;

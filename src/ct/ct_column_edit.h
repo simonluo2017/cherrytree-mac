@@ -75,6 +75,7 @@ private:
     Gdk::Point _get_cursor_column_mode_place();
     void _rebuild_marks(const Gdk::Point& pointStart, const Gdk::Point& pointEnd);
     bool _modifiers_allow_column_selection();
+    void _set_selecting_class(const bool on);
     Gdk::Point _kbAnchor{-1,-1};
     Gdk::Point _kbEnd{-1,-1};
     bool _kbActive{false};

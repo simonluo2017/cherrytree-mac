@@ -92,7 +92,7 @@ void CtClipboard::_cut_clipboard(Gtk::TextView* pTextView, CtCodebox* pCodebox)
         }
     }
     else {
-        auto pCtTextView = dynamic_cast<CtTextView*>(pTextView);
+        auto pCtTextView = CtTextView::from_widget(pTextView);
         if (pCtTextView and CtColEditState::PrEdit == pCtTextView->column_edit_get_state()) {
             g_signal_stop_emission_by_name(G_OBJECT(pTextView->gobj()), "cut-clipboard");
             CtClipboardData* clip_data = new CtClipboardData{};
@@ -126,7 +126,7 @@ void CtClipboard::_copy_clipboard(Gtk::TextView* pTextView, CtCodebox* pCodebox)
         }
     }
     else {
-        auto pCtTextView = dynamic_cast<CtTextView*>(pTextView);
+        auto pCtTextView = CtTextView::from_widget(pTextView);
         if (pCtTextView and CtColEditState::PrEdit == pCtTextView->column_edit_get_state()) {
             g_signal_stop_emission_by_name(G_OBJECT(pTextView->gobj()), "copy-clipboard");
             CtClipboardData* clip_data = new CtClipboardData{};
@@ -602,7 +602,7 @@ void CtClipboard::on_received_to_plain_text(const Gtk::SelectionData& selection_
     }
 
     if (CtClipboard::_static_from_column_edit) {
-        auto pCtTextView = dynamic_cast<CtTextView*>(pTextView);
+        auto pCtTextView = CtTextView::from_widget(pTextView);
         if (pCtTextView) {
             pCtTextView->column_edit_paste(plain_text);
             return;
@@ -985,7 +985,7 @@ void CtClipboard::on_received_to_cf_hdrop(const Gtk::SelectionData& selection_da
     }
 
     std::string syntax_highlighting;
-    if (auto pCtTextView = dynamic_cast<CtTextView*>(pTextView)) {
+    if (auto pCtTextView = CtTextView::from_widget(pTextView)) {
         syntax_highlighting = pCtTextView->get_syntax_highlighting();
     }
     else {
@@ -1099,7 +1099,7 @@ void CtClipboard::on_received_to_uri_list(const Gtk::SelectionData& selection_da
     uri_content = str::sanitize_bad_symbols(uri_content);
 
     std::string syntax_highlighting;
-    if (auto pCtTextView = dynamic_cast<CtTextView*>(pTextView)) {
+    if (auto pCtTextView = CtTextView::from_widget(pTextView)) {
         syntax_highlighting = pCtTextView->get_syntax_highlighting();
     }
     else {
