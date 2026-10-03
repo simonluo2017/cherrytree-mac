@@ -52,6 +52,92 @@ void glib_log_handler(const gchar*/*log_domain*/, GLogLevelFlags log_level, cons
     }
 }
 
+// On macOS (Homebrew/MacPorts) the compiled GSettings schemas of GTK, needed by the file
+// chooser, are often not found: the binary runs from the build directory, the Homebrew prefix
+// is not in the XDG data dirs, or the schemas were never compiled. GLib then prints
+// "No GSettings schemas are installed on the system" and aborts (trace trap) the first time a
+// file dialog is opened. This points GSETTINGS_SCHEMA_DIR to a usable compiled schemas
+// directory, compiling the schemas into the user config directory when needed.
+// It must run before the first use of GSettings (the default schema source is cached).
+[[maybe_unused]] static void ensure_gsettings_schemas_available()
+{
+    static const char* const requiredSchema{"org.gtk.Settings.FileChooser"};
+    if (not Glib::getenv("GSETTINGS_SCHEMA_DIR").empty()) {
+        return;
+    }
+    auto f_dir_provides_schema = [](const std::string& dir)->bool{
+        if (not Glib::file_test(Glib::build_filename(dir, "gschemas.compiled"), Glib::FILE_TEST_EXISTS)) {
+            return false;
+        }
+        GError* pError{nullptr};
+        GSettingsSchemaSource* pSource = g_settings_schema_source_new_from_directory(dir.c_str(), nullptr, TRUE, &pError);
+        if (pError) {
+            g_error_free(pError);
+            return false;
+        }
+        if (not pSource) {
+            return false;
+        }
+        GSettingsSchema* pSchema = g_settings_schema_source_lookup(pSource, requiredSchema, FALSE);
+        const bool found = nullptr != pSchema;
+        if (pSchema) g_settings_schema_unref(pSchema);
+        g_settings_schema_source_unref(pSource);
+        return found;
+    };
+    // 1) the directories GLib searches by itself
+    for (const std::string& dataDir : Glib::get_system_data_dirs()) {
+        if (f_dir_provides_schema(Glib::build_filename(dataDir, "glib-2.0", "schemas"))) {
+            return; // nothing to do
+        }
+    }
+    // 2) the usual package manager prefixes on macOS
+    const std::vector<std::string> candidateDirs{
+        "/opt/homebrew/share/glib-2.0/schemas",
+        "/usr/local/share/glib-2.0/schemas",
+        "/opt/local/share/glib-2.0/schemas"};
+    for (const std::string& dir : candidateDirs) {
+        if (f_dir_provides_schema(dir)) {
+            Glib::setenv("GSETTINGS_SCHEMA_DIR", dir, true/*overwrite*/);
+            g_message("GSETTINGS_SCHEMA_DIR = %s", dir.c_str());
+            return;
+        }
+    }
+    // 3) schemas installed but not compiled: compile them into the user config directory
+    for (const std::string& dir : candidateDirs) {
+        if (not Glib::file_test(Glib::build_filename(dir, std::string{requiredSchema} + ".gschema.xml"), Glib::FILE_TEST_EXISTS)) {
+            continue;
+        }
+        const std::string targetDir = Glib::build_filename(fs::get_cherrytree_configdir().string(), "gsettings-schemas");
+        if (g_mkdir_with_parents(targetDir.c_str(), 0755) < 0) {
+            continue;
+        }
+        std::string compiler{"glib-compile-schemas"};
+        const std::string compilerInPrefix = Glib::build_filename(dir, "..", "..", "..", "bin", "glib-compile-schemas");
+        if (Glib::file_test(compilerInPrefix, Glib::FILE_TEST_IS_EXECUTABLE)) {
+            compiler = compilerInPrefix;
+        }
+        std::string std_out, std_err;
+        int exit_status{-1};
+        try {
+            Glib::spawn_command_line_sync(Glib::shell_quote(compiler) + " --targetdir=" + Glib::shell_quote(targetDir) + " " + Glib::shell_quote(dir),
+                                          &std_out, &std_err, &exit_status);
+        }
+        catch (Glib::Error& error) {
+            g_warning("%s: %s", compiler.c_str(), error.what().c_str());
+            continue;
+        }
+        if (0 == exit_status and f_dir_provides_schema(targetDir)) {
+            Glib::setenv("GSETTINGS_SCHEMA_DIR", targetDir, true/*overwrite*/);
+            g_message("compiled GSettings schemas from %s, GSETTINGS_SCHEMA_DIR = %s", dir.c_str(), targetDir.c_str());
+            return;
+        }
+        g_warning("%s failed (%d): %s", compiler.c_str(), exit_status, std_err.c_str());
+    }
+    g_warning("GSettings schema %s not found: the file dialogs will abort. "
+              "Install the GTK schemas (e.g. 'brew install gtk+3') and run 'glib-compile-schemas <prefix>/share/glib-2.0/schemas', "
+              "or export GSETTINGS_SCHEMA_DIR pointing to a directory containing gschemas.compiled", requiredSchema);
+}
+
 int main(int argc, char *argv[])
 {
 #if GTKMM_MAJOR_VERSION >= 4
@@ -84,6 +170,10 @@ int main(int argc, char *argv[])
         //g_message("exe_path = %s", pExePath);
         fs::register_exe_path_detect_if_portable(pExePath);
     }
+
+#if defined(__APPLE__)
+    ensure_gsettings_schemas_available();
+#endif /* __APPLE__ */
 
 #ifdef HAVE_NLS
     const std::string ct_lang = CtMiscUtil::get_ct_language();
