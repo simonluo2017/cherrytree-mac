@@ -98,6 +98,9 @@ public:
     int                                         uiAppearance{0};
     // Platform-native looking window chrome (sidebar, node header, toolbar, status bar)
     bool                                        nativeChrome{true};
+    // the built-in editor style schemes (user-1 dark, user-2 light) and the tree explorer
+    // light/dark presets follow the effective light/dark appearance
+    bool                                        coloursFollowAppearance{true};
     bool                                        showNodeNameHeader{true};
     int                                         nodesOnNodeNameHeader{3};
     int                                         maxMatchesInPage{500};

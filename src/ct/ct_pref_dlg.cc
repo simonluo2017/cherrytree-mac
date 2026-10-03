@@ -424,6 +424,9 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     radiobutton_appearance_system->set_active(0 == _pConfig->uiAppearance);
     radiobutton_appearance_light->set_active(1 == _pConfig->uiAppearance);
     radiobutton_appearance_dark->set_active(2 == _pConfig->uiAppearance);
+    auto checkbutton_colours_follow = Gtk::manage(new Gtk::CheckButton{_("Editor and Tree Explorer Colours Follow the Light/Dark Appearance")});
+    checkbutton_colours_follow->set_active(_pConfig->coloursFollowAppearance);
+    checkbutton_colours_follow->set_tooltip_text(_("Switches between the built-in light (user-2) and dark (user-1) style schemes and the tree explorer presets; custom colours are left unchanged."));
     auto checkbutton_native_chrome = Gtk::manage(new Gtk::CheckButton{_("Native Looking Sidebar, Toolbar and Status Bar")});
     checkbutton_native_chrome->set_active(_pConfig->nativeChrome);
     auto checkbutton_native_menubar = Gtk::manage(new Gtk::CheckButton{_("Native Application Menubar (Global Menu Bar on macOS)")});
@@ -431,11 +434,13 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     checkbutton_native_menubar->set_tooltip_text(_("The menu is exported by the application: on macOS it is the global menu bar with Command key shortcuts."));
 #if GTKMM_MAJOR_VERSION >= 4
     vbox_appearance->append(*hbox_appearance_mode);
+    vbox_appearance->append(*checkbutton_colours_follow);
     vbox_appearance->append(*checkbutton_native_chrome);
     checkbutton_native_menubar->set_sensitive(false); // GTK4 always uses the menu model
     vbox_appearance->append(*checkbutton_native_menubar);
 #else
     vbox_appearance->pack_start(*hbox_appearance_mode, false, false);
+    vbox_appearance->pack_start(*checkbutton_colours_follow, false, false);
     vbox_appearance->pack_start(*checkbutton_native_chrome, false, false);
     vbox_appearance->pack_start(*checkbutton_native_menubar, false, false);
 #endif
@@ -457,8 +462,12 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     auto f_on_appearance_changed = [this](const int appearance) {
         if (_pConfig->uiAppearance == appearance) return;
         _pConfig->uiAppearance = appearance;
-        apply_for_each_window([](CtMainWin* win) { win->apply_ui_appearance(); });
+        apply_for_each_window([](CtMainWin* win) { win->apply_ui_appearance(true/*refresh_views*/); });
     };
+    checkbutton_colours_follow->signal_toggled().connect([this, checkbutton_colours_follow](){
+        _pConfig->coloursFollowAppearance = checkbutton_colours_follow->get_active();
+        apply_for_each_window([](CtMainWin* win) { win->apply_ui_appearance(true/*refresh_views*/); });
+    });
     radiobutton_appearance_system->signal_toggled().connect([radiobutton_appearance_system, f_on_appearance_changed](){
         if (radiobutton_appearance_system->get_active()) f_on_appearance_changed(0);
     });

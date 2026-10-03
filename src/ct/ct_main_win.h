@@ -110,8 +110,10 @@ public:
     void text_view_apply_cursor_position(CtTreeIter& treeIter, const int cursor_pos, const int v_adj_val);
 
     void update_theme();
-    // light/dark appearance (uiAppearance: 0 system, 1 light, 2 dark)
-    void apply_ui_appearance();
+    // light/dark appearance (uiAppearance: 0 system, 1 light, 2 dark); with
+    // coloursFollowAppearance the built-in editor schemes and tree presets follow it.
+    // refresh_views: reapply the schemes to the loaded buffers (not needed at startup)
+    void apply_ui_appearance(const bool refresh_views);
 
     bool file_open(const fs::path& filepath,
                    const std::string& node_to_focus,

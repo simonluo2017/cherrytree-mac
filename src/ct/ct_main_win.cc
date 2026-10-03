@@ -708,7 +708,7 @@ void CtMainWin::config_apply()
 //        Gtk::Settings::get_default()->property_gtk_overlay_scrolling() = _pCtConfig->overlayScroll;
         _scrolledwindowText.set_overlay_scrolling(static_cast<bool>(_pCtConfig->overlayScroll));
     }
-    apply_ui_appearance();
+    apply_ui_appearance(false/*refresh_views*/);
     update_theme();
 #if GTKMM_MAJOR_VERSION >= 4
     // Refresh shortcuts — works globally, no menu open needed
@@ -726,7 +726,7 @@ void CtMainWin::config_update_data_from_curr_status()
     _ctTextview.synch_spell_check_change_from_gspell_right_click_menu();
 }
 
-void CtMainWin::apply_ui_appearance()
+void CtMainWin::apply_ui_appearance(const bool refresh_views)
 {
     Glib::RefPtr<Gtk::Settings> pSettings = Gtk::Settings::get_default();
     if (not pSettings) return;
@@ -745,6 +745,53 @@ void CtMainWin::apply_ui_appearance()
     }
     if (pSettings->property_gtk_application_prefer_dark_theme() != preferDark) {
         pSettings->property_gtk_application_prefer_dark_theme() = preferDark;
+    }
+    if (not _pCtConfig->coloursFollowAppearance) {
+        return;
+    }
+    // the built-in style schemes: user-1 is light text on dark, user-2 dark text on light.
+    // Only these two are swapped, a custom scheme chosen by the user is left alone.
+    const std::string wantScheme = preferDark ? "user-1" : "user-2";
+    const std::string otherScheme = preferDark ? "user-2" : "user-1";
+    bool rtChanged{false};
+    bool ptChanged{false};
+    if (_pCtConfig->rtStyleScheme == otherScheme) {
+        _pCtConfig->rtStyleScheme = wantScheme;
+        rtChanged = true;
+    }
+    if (_pCtConfig->ptStyleScheme == otherScheme) {
+        _pCtConfig->ptStyleScheme = wantScheme;
+        ptChanged = true;
+    }
+    // the tree explorer light/dark presets (custom colours are left alone)
+    const bool treeIsLightPreset = _pCtConfig->ttDefFg == CtConst::TREE_TEXT_LIGHT_FG and
+                                   _pCtConfig->ttDefBg == CtConst::TREE_TEXT_LIGHT_BG and
+                                   _pCtConfig->ttSelFg == CtConst::TREE_TEXT_LIGHT_BG and
+                                   _pCtConfig->ttSelBg == CtConst::TREE_TEXT_SEL_BG;
+    const bool treeIsDarkPreset = _pCtConfig->ttDefFg == CtConst::TREE_TEXT_DARK_FG and
+                                  _pCtConfig->ttDefBg == CtConst::TREE_TEXT_DARK_BG and
+                                  _pCtConfig->ttSelFg == CtConst::TREE_TEXT_DARK_BG and
+                                  _pCtConfig->ttSelBg == CtConst::TREE_TEXT_SEL_BG;
+    bool treeChanged{false};
+    if (preferDark and treeIsLightPreset) {
+        _pCtConfig->ttDefFg = CtConst::TREE_TEXT_DARK_FG;
+        _pCtConfig->ttDefBg = CtConst::TREE_TEXT_DARK_BG;
+        _pCtConfig->ttSelFg = CtConst::TREE_TEXT_DARK_BG;
+        treeChanged = true;
+    }
+    else if (not preferDark and treeIsDarkPreset) {
+        _pCtConfig->ttDefFg = CtConst::TREE_TEXT_LIGHT_FG;
+        _pCtConfig->ttDefBg = CtConst::TREE_TEXT_LIGHT_BG;
+        _pCtConfig->ttSelFg = CtConst::TREE_TEXT_LIGHT_BG;
+        treeChanged = true;
+    }
+    if (refresh_views) {
+        if (rtChanged) reapply_syntax_highlighting('r'/*RichText*/);
+        if (ptChanged) reapply_syntax_highlighting('p'/*PlainTextNCode*/);
+        if (treeChanged) {
+            update_theme();
+            window_header_update();
+        }
     }
 }
 
