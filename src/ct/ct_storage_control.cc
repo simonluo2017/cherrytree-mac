@@ -676,8 +676,10 @@ void CtStorageControl::_backupEncryptThread()
                 fs::path tilda_filepath = first_backup_file_or_dir + str::repeat(CtConst::CHAR_TILDE, _pCtConfig->backupNum - 2).raw();
                 while (str::endswith(tilda_filepath.string(), CtConst::CHAR_TILDE)) {
                     if (fs::is_regular_file(tilda_filepath)) {
-                        if (not fs::move_file(tilda_filepath, tilda_filepath.string() + CtConst::CHAR_TILDE)) {
-                            _pCtMainWin->errorsDEQueue.push_back(str::format(_("You Have No Write Access to %s"), fs::path{first_backup_file_or_dir}.parent_path().string()));
+                        std::string moveError;
+                        if (not fs::move_file(tilda_filepath, tilda_filepath.string() + CtConst::CHAR_TILDE, &moveError)) {
+                            _pCtMainWin->errorsDEQueue.push_back(str::format(_("You Have No Write Access to %s"), fs::path{first_backup_file_or_dir}.parent_path().string()) +
+                                                                 "\n" + _("Failed to rotate the backup files") + ": " + moveError);
                             _pCtMainWin->dispatcherErrorMsg.emit();
                             break;
                         }
@@ -689,8 +691,10 @@ void CtStorageControl::_backupEncryptThread()
                 }
             }
 
-            if (not fs::move_file(pBackupEncryptData->main_backup, first_backup_file_or_dir)) {
-                _pCtMainWin->errorsDEQueue.push_back(str::format(_("You Have No Write Access to %s"), fs::path{first_backup_file_or_dir}.parent_path().string()));
+            std::string moveError;
+            if (not fs::move_file(pBackupEncryptData->main_backup, first_backup_file_or_dir, &moveError)) {
+                _pCtMainWin->errorsDEQueue.push_back(str::format(_("You Have No Write Access to %s"), fs::path{first_backup_file_or_dir}.parent_path().string()) +
+                                                     "\n" + _("Failed to store the backup file") + ": " + moveError);
                 _pCtMainWin->dispatcherErrorMsg.emit();
             }
 #if defined(DEBUG_BACKUP_ENCRYPT)

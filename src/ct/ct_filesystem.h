@@ -57,7 +57,9 @@ const char* get_latex_dvipng_console_bin_prefix();
 
 bool copy_file(const path& from, const path& to);
 
-bool move_file(const path& from, const path& to);
+// moves (renames) a file, falling back to copy + delete when the rename is refused;
+// pErrorMsg (optional) receives the error description on failure
+bool move_file(const path& from, const path& to, std::string* pErrorMsg = nullptr);
 
 bool exists(const path& filepath);
 

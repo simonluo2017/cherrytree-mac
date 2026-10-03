@@ -236,7 +236,7 @@ bool copy_file(const path& from, const path& to)
     }
 }
 
-bool move_file(const path& from, const path& to)
+bool move_file(const path& from, const path& to, std::string* pErrorMsg/*= nullptr*/)
 {
     GFile* pGFile_from = g_file_new_for_path(from.c_str());
     GFile* pGFile_to = g_file_new_for_path(to.c_str());
@@ -250,7 +250,36 @@ bool move_file(const path& from, const path& to)
                                   &pError);
     if (pError) {
         spdlog::warn("{}, error: {}, from: {}, to: {}", __FUNCTION__, pError->message, from.string(), to.string());
+        std::string errorMsg{pError->message};
         g_error_free(pError);
+        pError = NULL;
+        // a rename can be refused where a copy is not (e.g. macOS: files managed by iCloud Drive,
+        // locked destination, folder access restrictions): fall back to copy + delete
+        if (not is_directory(from)) {
+            retSuccess = g_file_copy(pGFile_from,
+                                     pGFile_to,
+                                     G_FILE_COPY_OVERWRITE,
+                                     NULL,
+                                     NULL,  // GFileProgressCallback
+                                     NULL,  // data
+                                     &pError);
+            if (pError) {
+                spdlog::warn("{} copy fallback, error: {}", __FUNCTION__, pError->message);
+                errorMsg += std::string{"; "} + pError->message;
+                g_error_free(pError);
+                pError = NULL;
+            }
+            else if (retSuccess) {
+                if (not g_file_delete(pGFile_from, NULL, &pError)) {
+                    spdlog::warn("{} copy fallback, could not remove the source: {}", __FUNCTION__, pError ? pError->message : "?");
+                    if (pError) { g_error_free(pError); pError = NULL; }
+                }
+                spdlog::debug("{} copy fallback ok, from: {}, to: {}", __FUNCTION__, from.string(), to.string());
+            }
+        }
+        if (not retSuccess and pErrorMsg) {
+            *pErrorMsg = errorMsg;
+        }
     }
     g_object_unref(pGFile_from);
     g_object_unref(pGFile_to);
