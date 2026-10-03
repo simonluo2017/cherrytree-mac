@@ -600,7 +600,7 @@ Glib::RefPtr<Gio::Menu> CtMenu::build_gio_menubar(const bool reuse_existing)
 void CtMenu::update_bookmarks_gio_menu(const std::list<std::tuple<gint64, Glib::ustring, const char*>>& bookmarks)
 {
     const std::string prefix{gio_action_prefix()};
-    auto append_action_item = [this, &prefix](const Glib::RefPtr<Gio::Menu>& section, const char* action_id) {
+    auto append_action_item = [this](const Glib::RefPtr<Gio::Menu>& section, const char* action_id) {
         if (CtMenuAction* action = find_action(action_id)) {
             auto item = Gio::MenuItem::create(action->name, gio_action_name(action->id));
             const std::string& shortcut = action->get_shortcut(_pCtConfig);

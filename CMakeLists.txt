@@ -258,6 +258,33 @@ if(USE_VTE)
   )
 endif()
 
+# The pkg-config library directories are needed by the linker when the libraries
+# live outside of the default search path (e.g. Homebrew on macOS: /opt/homebrew/lib)
+link_directories(
+  ${GTKMM_LIBRARY_DIRS}
+  ${GTKSV_LIBRARY_DIRS}
+  ${GLIBMM_LIBRARY_DIRS}
+  ${PANGOMM_LIBRARY_DIRS}
+  ${LIBXML_LIBRARY_DIRS}
+  ${XML2_LIBRARY_DIRS}
+  ${SQLITE_LIBRARY_DIRS}
+  ${CURL_LIBRARY_DIRS}
+  ${UCHARDET_LIBRARY_DIRS}
+  ${FRIBIDI_LIBRARY_DIRS}
+)
+if(CT_USE_GSPELL)
+  link_directories(${GSPELL_LIBRARY_DIRS})
+endif()
+if(CT_USE_LIBSPELLING)
+  link_directories(${LIBSPELLING_LIBRARY_DIRS})
+endif()
+if(USE_SHARED_FMT_SPDLOG)
+  link_directories(${FMT_LIBRARY_DIRS} ${SPDLOG_LIBRARY_DIRS})
+endif()
+if(USE_VTE)
+  link_directories(${VTE_LIBRARY_DIRS})
+endif()
+
 add_subdirectory(src/ct)
 
 if(BUILD_TESTING AND NOT DEFINED ENV{DEB_BUILD_OPTIONS})
