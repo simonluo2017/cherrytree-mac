@@ -414,8 +414,10 @@ Gtk::MenuButton* CtMenu::build_bookmarks_button4(std::list<std::tuple<gint64, Gl
 
 /*static*/ std::string CtMenu::to_primary_accel(const std::string& shortcut)
 {
-    // <Primary> is the platform primary accelerator: Command on macOS, Control elsewhere
-    return str::replace(shortcut, "<control>", "<Primary>");
+    // The configured shortcuts are used unchanged: like the original macOS build of CherryTree
+    // the application shortcuts stay Control based (Ctrl+S, Ctrl+R, ...), only the standard
+    // clipboard keys (Cmd+X/C/V/A), Cmd+, and Cmd+Q are Command based on macOS.
+    return shortcut;
 }
 
 /*static*/ std::string CtMenu::shortcut_display(const std::string& shortcut, const bool macos_primary)

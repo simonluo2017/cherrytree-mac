@@ -1453,11 +1453,8 @@ void CtMainWin::init_native_app_menubar()
             accels.push_back(CtMenu::to_primary_accel(shortcut));
         }
 #if defined(__APPLE__)
-        // standard macOS key equivalents in addition to the configured shortcuts
+        // the standard macOS Preferences key equivalent in addition to the configured shortcut
         if ("preferences_dlg" == action.id) accels.push_back("<Primary>comma");
-        else if ("toggle_fullscreen" == action.id) accels.push_back("<Primary><Control>f");
-        else if ("ct_help" == action.id) accels.push_back("<Primary>question");
-        else if ("act_redo" == action.id) accels.push_back("<Primary><Shift>z");
 #endif // __APPLE__
         rApp->set_accels_for_action(CtMenu::gio_action_name(action.id), accels);
     }

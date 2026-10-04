@@ -52,13 +52,7 @@ std::vector<std::string> CtMenu::_get_ui_str_toolbars()
                         tooltip = pAction->desc;
                     }
                     else {
-#if defined(__APPLE__)
-                        // with the native application menubar the shortcuts are bound to Command
-                        const bool macos_primary = _pCtConfig->nativeAppMenubar;
-#else
-                        const bool macos_primary = false;
-#endif
-                        kb_shortcut = CtMenu::shortcut_display(kb_shortcut, macos_primary);
+                        kb_shortcut = CtMenu::shortcut_display(kb_shortcut, false/*macos_primary*/);
                         tooltip = pAction->desc + " (" + str::xml_escape(kb_shortcut).c_str() + ")";
                     }
                     if (not tooltip.empty()) {
