@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds a self contained CherryTree.app (the Homebrew GTK libraries are bundled) and
+# Builds a self contained cherrytree-mac.app (the Homebrew GTK libraries are bundled) and
 # packs it into a .dmg that can be dragged into /Applications.
 #
 # Requirements (Homebrew, Apple Silicon or Intel):
@@ -11,13 +11,14 @@
 # Usage:  ./scripts/macos_make_app_dmg.sh            (release build + app + dmg)
 #         ./scripts/macos_make_app_dmg.sh --no-build  (reuse ./build/cherrytree)
 #
-# Result: build/macos/CherryTree.app and build/macos/CherryTree-<version>-macos-<arch>.dmg
+# Result: build/macos/cherrytree-mac.app and build/macos/cherrytree-mac-<version>-macos-<arch>.dmg
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 SRC_DIR="$(pwd)"
 BREW_PREFIX="$(brew --prefix)"
-APP_NAME="CherryTree"
+# bundle name (override with APP_NAME=... ./scripts/macos_make_app_dmg.sh)
+APP_NAME="${APP_NAME:-cherrytree-mac}"
 OUT_DIR="$SRC_DIR/build/macos"
 APP="$OUT_DIR/$APP_NAME.app"
 CONTENTS="$APP/Contents"
@@ -123,7 +124,7 @@ cat > "$CONTENTS/Info.plist" <<EOF
 <dict>
   <key>CFBundleName</key><string>$APP_NAME</string>
   <key>CFBundleDisplayName</key><string>$APP_NAME</string>
-  <key>CFBundleIdentifier</key><string>net.giuspen.cherrytree</string>
+  <key>CFBundleIdentifier</key><string>net.giuspen.$APP_NAME</string>
   <key>CFBundleVersion</key><string>$VERSION</string>
   <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundlePackageType</key><string>APPL</string>
