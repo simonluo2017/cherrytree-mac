@@ -429,6 +429,8 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     checkbutton_colours_follow->set_tooltip_text(_("Switches between the built-in light (user-2) and dark (user-1) style schemes and the tree explorer presets; custom colours are left unchanged."));
     auto checkbutton_native_chrome = Gtk::manage(new Gtk::CheckButton{_("Native Looking Sidebar, Toolbar and Status Bar")});
     checkbutton_native_chrome->set_active(_pConfig->nativeChrome);
+    auto checkbutton_md_preview = Gtk::manage(new Gtk::CheckButton{_("Open Markdown Nodes in the Rendered Preview (Raw to edit)")});
+    checkbutton_md_preview->set_active(_pConfig->mdPreviewDefault);
     auto checkbutton_native_menubar = Gtk::manage(new Gtk::CheckButton{_("Native Application Menubar (Global Menu Bar on macOS)")});
     checkbutton_native_menubar->set_active(_pConfig->nativeAppMenubar);
     checkbutton_native_menubar->set_tooltip_text(_("The menu is exported by the application: on macOS it is the global menu bar with Command key shortcuts."));
@@ -436,12 +438,14 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     vbox_appearance->append(*hbox_appearance_mode);
     vbox_appearance->append(*checkbutton_colours_follow);
     vbox_appearance->append(*checkbutton_native_chrome);
+    vbox_appearance->append(*checkbutton_md_preview);
     checkbutton_native_menubar->set_sensitive(false); // GTK4 always uses the menu model
     vbox_appearance->append(*checkbutton_native_menubar);
 #else
     vbox_appearance->pack_start(*hbox_appearance_mode, false, false);
     vbox_appearance->pack_start(*checkbutton_colours_follow, false, false);
     vbox_appearance->pack_start(*checkbutton_native_chrome, false, false);
+    vbox_appearance->pack_start(*checkbutton_md_preview, false, false);
     vbox_appearance->pack_start(*checkbutton_native_menubar, false, false);
 #endif
     Gtk::Frame* frame_appearance = new_managed_frame_with_align(_("Appearance"), vbox_appearance);
@@ -480,6 +484,9 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     checkbutton_native_chrome->signal_toggled().connect([this, checkbutton_native_chrome](){
         _pConfig->nativeChrome = checkbutton_native_chrome->get_active();
         apply_for_each_window([](CtMainWin* win) { win->update_theme(); });
+    });
+    checkbutton_md_preview->signal_toggled().connect([this, checkbutton_md_preview](){
+        _pConfig->mdPreviewDefault = checkbutton_md_preview->get_active();
     });
     checkbutton_native_menubar->signal_toggled().connect([this, checkbutton_native_menubar](){
         _pConfig->nativeAppMenubar = checkbutton_native_menubar->get_active();

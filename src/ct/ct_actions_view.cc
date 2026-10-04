@@ -212,3 +212,8 @@ void CtActions::_menubar_in_titlebar_set(const bool setOn)
     _pCtConfig->menubarInTitlebar = setOn;
     CtDialogs::info_dialog(_("This Change will have Effect Only After Restarting CherryTree."), *_pCtMainWin);
 }
+
+void CtActions::toggle_md_preview()
+{
+    _pCtMainWin->md_toggle_view(not _pCtMainWin->md_preview_active());
+}

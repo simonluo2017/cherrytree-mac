@@ -444,6 +444,8 @@ void CtMenu::init_actions(CtActions* pActions)
             _("Increase the Number of Last Visited Nodes on Node Name Header"), sigc::mem_fun(*pActions, &CtActions::more_nodes_on_node_name_header)});
         _actions.push_back(CtMenuAction{view_cat, "less_visit_nnh", "ct_remove", _("L_ess Last Visited Nodes on Node Name Header"), None,
             _("Decrease the Number of Last Visited Nodes on Node Name Header"), sigc::mem_fun(*pActions, &CtActions::less_nodes_on_node_name_header)});
+        _actions.push_back(CtMenuAction{view_cat, "toggle_md_preview", "ct_markdown", _("Markdown Previe_w/Raw"), KB_CONTROL+KB_SHIFT+"y",
+            _("Toggle Between the Rendered Preview and the Source of a Markdown Node"), sigc::mem_fun(*pActions, &CtActions::toggle_md_preview)});
         _actions.push_back(CtMenuAction{view_cat, "toggle_fullscreen", "ct_fullscreen", _("Full Screen _On/Off"), "F11",
             _("Toggle Full Screen On/Off"), sigc::mem_fun(*pActions, &CtActions::toggle_fullscreen)});
 #if GTKMM_MAJOR_VERSION < 4

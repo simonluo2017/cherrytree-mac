@@ -119,6 +119,7 @@ private:
     std::unordered_map<std::string_view, bool> _open_tags;
 
     xmlpp::Element* _build_root_el();
+    void _new_element_after_widget();
 
     // XML generation
     std::shared_ptr<xmlpp::Document> _document{std::make_unique<xmlpp::Document>()};
@@ -230,6 +231,10 @@ public:
 private:
     void _place_free_text();
     void _add_scale_to_last(int level);
+    /// Tokenize and process a chunk of markdown that contains no table block
+    void _feed_tokens(const Glib::ustring& buffer);
+    /// Parse a block of consecutive "| a | b |" lines into a table
+    void _feed_table_block(const std::vector<Glib::ustring>& lines);
     void _add_table_cell(const std::string& text);
     /// Add the current table row to the table
     void _pop_table_row();

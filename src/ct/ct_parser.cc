@@ -52,7 +52,7 @@ void CtDocumentBuilder::add_image(const std::string& path)
 {
     try {
         CtXML::image_to_xml(_current_element->get_parent(), path, _currOffset, CtConst::TAG_PROP_VAL_LEFT);
-        close_current_tag();
+        _new_element_after_widget();
         ++_currOffset;
     } catch(std::exception& e) {
         spdlog::error("Exception occured while adding image: {}", e.what());
@@ -83,7 +83,7 @@ void CtDocumentBuilder::add_codebox(const std::string& language, const std::stri
     close_current_tag();
     xmlpp::Element* p_codebox_node = CtXML::codebox_to_xml(_current_element->get_parent(), CtConst::TAG_PROP_VAL_LEFT, _currOffset, _pCtConfig->codeboxWidth, _pCtConfig->codeboxHeight, true, language, false, false);
     p_codebox_node->add_child_text(text);
-    close_current_tag();
+    _new_element_after_widget();
     ++_currOffset;
 }
 
@@ -178,6 +178,15 @@ void CtDocumentBuilder::add_hrule()
     add_newline();
 }
 
+void CtDocumentBuilder::_new_element_after_widget()
+{
+    // a widget node was appended after the current element: text that follows must go
+    // into a fresh element placed after the widget, even if the current one is still empty
+    // (close_current_tag() alone would keep the empty element that precedes the widget)
+    _current_element = CT_XML_ADD_CHILD(_current_element->get_parent(), "rich_text");
+    _open_tags.clear();
+}
+
 void CtDocumentBuilder::close_current_tag()
 {
     if (!tag_empty()) {
@@ -220,7 +229,7 @@ void CtDocumentBuilder::add_table(const std::vector<std::vector<Glib::ustring>>&
 {
     const bool is_light = table_matrix.size() > 0 and table_matrix.size() * table_matrix.front().size() > static_cast<unsigned>(_pCtConfig->tableCellsGoLight);
     CtXmlHelper::table_to_xml(_current_element->get_parent(), table_matrix, _currOffset, CtConst::TAG_PROP_VAL_LEFT, _pCtConfig->tableColWidthDefault, "", is_light);
-    close_current_tag();
+    _new_element_after_widget();
     ++_currOffset;
 }
 

@@ -364,6 +364,8 @@ const char* CtMenu::_get_ui_str_menu()
     <menuitem action='toggle_show_node_name_head'/>
     <menuitem action='toggle_show_vte'/>
     <separator/>
+    <menuitem action='toggle_md_preview'/>
+    <separator/>
     <menuitem action='menubar_in_titlebar'/>
     <menuitem action='toggle_fullscreen'/>
     <menuitem action='toggle_always_on_top'/>

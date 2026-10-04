@@ -945,6 +945,7 @@ void CtTreeStore::text_view_apply_textbuffer(CtTreeIter& treeIter, CtTextView* p
         pCtTextView->set_buffer(Glib::RefPtr<Gtk::TextBuffer>{});
         pCtTextView->set_spell_check(false);
         textView.set_sensitive(false);
+        _pCtMainWin->md_view_after_buffer_applied(treeIter, pCtTextView);
         return;
     }
 
@@ -1004,6 +1005,7 @@ void CtTreeStore::text_view_apply_textbuffer(CtTreeIter& treeIter, CtTextView* p
 
 #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
     textView.show_all();
+    _pCtMainWin->md_view_after_buffer_applied(treeIter, pCtTextView);
 #else
     Glib::signal_idle().connect([pCtTextView, anchored_widgets_to_relayout]() {
         gtk4_refresh_anchored_widgets(pCtTextView->mm(), anchored_widgets_to_relayout, "post-load-idle", true/*doWrapToggle*/);

@@ -266,6 +266,7 @@ void CtConfig::_populate_keyfile_from_data()
     _uKeyFile->set_integer(_currentGroup, "ui_appearance", uiAppearance);
     _uKeyFile->set_boolean(_currentGroup, "native_chrome", nativeChrome);
     _uKeyFile->set_boolean(_currentGroup, "colours_follow_appearance", coloursFollowAppearance);
+    _uKeyFile->set_boolean(_currentGroup, "md_preview_default", mdPreviewDefault);
     _uKeyFile->set_boolean(_currentGroup, "show_node_name_header", showNodeNameHeader);
     _uKeyFile->set_integer(_currentGroup, "nodes_on_node_name_header", nodesOnNodeNameHeader);
     _uKeyFile->set_integer(_currentGroup, "max_matches_in_page", maxMatchesInPage);
@@ -576,6 +577,7 @@ void CtConfig::_populate_data_from_keyfile()
     if (uiAppearance < 0 or uiAppearance > 2) uiAppearance = 0;
     _populate_bool_from_keyfile("native_chrome", &nativeChrome);
     _populate_bool_from_keyfile("colours_follow_appearance", &coloursFollowAppearance);
+    _populate_bool_from_keyfile("md_preview_default", &mdPreviewDefault);
     _populate_bool_from_keyfile("show_node_name_header", &showNodeNameHeader);
     _populate_int_from_keyfile("nodes_on_node_name_header", &nodesOnNodeNameHeader);
     _populate_int_from_keyfile("max_matches_in_page", &maxMatchesInPage);

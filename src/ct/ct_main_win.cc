@@ -103,6 +103,8 @@ void CtMainWin::init_app_actions_gtk4()
 #include "ct_main_win.h"
 #include "ct_actions.h"
 #include "ct_storage_control.h"
+#include "ct_storage_xml.h"
+#include "ct_parser.h"
 #include "ct_clipboard.h"
 #include "ct_dialogs.h"
 
@@ -1038,6 +1040,27 @@ Gtk::EventBox& CtMainWin::_init_window_header()
     _ctWinHeader.headerBox.pack_start(_ctWinHeader.lockIcon, false, false);
     _ctWinHeader.headerBox.pack_start(_ctWinHeader.bookmarkIcon, false, false);
     _ctWinHeader.headerBox.pack_start(_ctWinHeader.ghostIcon, false, false);
+    // Preview | Raw switch, shown for Markdown/Remarkup nodes only
+    _ctWinHeader.mdPreviewButton.set_label(_("Preview"));
+    _ctWinHeader.mdPreviewButton.set_mode(false/*draw_indicator*/);
+    _ctWinHeader.mdPreviewButton.set_tooltip_text(_("Show the rendered document (read only)"));
+    _ctWinHeader.mdRawButton.set_label(_("Raw"));
+    _ctWinHeader.mdRawButton.set_mode(false/*draw_indicator*/);
+    _ctWinHeader.mdRawButton.set_tooltip_text(_("Edit the source text"));
+    _ctWinHeader.mdRawButton.join_group(_ctWinHeader.mdPreviewButton);
+    _ctWinHeader.mdViewBox.get_style_context()->add_class("linked");
+    _ctWinHeader.mdViewBox.get_style_context()->add_class("ct-md-view-switch");
+    _ctWinHeader.mdViewBox.pack_start(_ctWinHeader.mdPreviewButton, false, false);
+    _ctWinHeader.mdViewBox.pack_start(_ctWinHeader.mdRawButton, false, false);
+    _ctWinHeader.mdViewBox.set_margin_end(6);
+    _ctWinHeader.mdViewBox.set_no_show_all(true);
+    _ctWinHeader.mdPreviewButton.show();
+    _ctWinHeader.mdRawButton.show();
+    _ctWinHeader.mdPreviewButton.signal_toggled().connect([this](){
+        if (_mdSwitching) return;
+        md_toggle_view(_ctWinHeader.mdPreviewButton.get_active());
+    });
+    _ctWinHeader.headerBox.pack_end(_ctWinHeader.mdViewBox, false, false);
     _ctWinHeader.headerBox.set_margin_end(8);
     _ctWinHeader.eventBox.add(_ctWinHeader.headerBox);
 #endif
@@ -1214,6 +1237,133 @@ void CtMainWin::window_header_update_ghost_icon(const bool show)
 void CtMainWin::window_header_update_bookmark_icon(const bool show)
 {
     _ctWinHeader.bookmarkIcon.set_visible(show);
+}
+
+/*static*/ bool CtMainWin::is_markdown_syntax(const std::string& syntax)
+{
+    return "markdown" == syntax or "markdown-extra" == syntax or "remarkup" == syntax;
+}
+
+void CtMainWin::_md_view_buttons_update(const bool show, const bool preview)
+{
+#if GTKMM_MAJOR_VERSION < 4
+    _mdSwitching = true;
+    _ctWinHeader.mdPreviewButton.set_active(preview);
+    _ctWinHeader.mdRawButton.set_active(not preview);
+    _mdSwitching = false;
+    _ctWinHeader.mdViewBox.set_visible(show);
+#else
+    (void)show; (void)preview;
+#endif
+}
+
+void CtMainWin::_md_preview_drop()
+{
+    if (not _mdPreviewActive) return;
+    _mdPreviewActive = false;
+    // the text view already holds another buffer: the anchored widgets of the preview buffer
+    // were unparented by the text view, they can be freed now
+    for (CtAnchoredWidget* pWidget : _mdPreviewWidgets) {
+        delete pWidget;
+    }
+    _mdPreviewWidgets.clear();
+    _mdPreviewBuffer.reset();
+}
+
+void CtMainWin::_md_preview_show(CtTreeIter treeIter)
+{
+#if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
+    Glib::RefPtr<Gtk::TextBuffer> pSourceBuffer = treeIter.get_node_text_buffer();
+    if (not pSourceBuffer) return;
+    // render the source into a rich text buffer with the Markdown parser used by the import
+    CtMDParser parser{_pCtConfig};
+    parser.wipe_doc();
+    parser.feed(pSourceBuffer->get_text());
+    Glib::RefPtr<Gtk::TextBuffer> pPreviewBuffer = get_new_text_buffer();
+    std::list<CtAnchoredWidget*> widgets;
+    auto pGtkSourceBuffer = GTK_SOURCE_BUFFER(pPreviewBuffer->gobj());
+    gtk_source_buffer_begin_not_undoable_action(pGtkSourceBuffer);
+    const bool user_active_restore = user_active();
+    user_active() = false;
+    if (xmlpp::Node* pRoot = parser.doc().root_node()) {
+        for (xmlpp::Node* xml_slot : pRoot->get_children("slot")) {
+            for (xmlpp::Node* child : xml_slot->get_children()) {
+                Gtk::TextIter insert_iter = pPreviewBuffer->get_insert()->get_iter();
+                CtStorageXmlHelper{this}.get_text_buffer_one_slot_from_xml(pPreviewBuffer, child, widgets, &insert_iter, -1, "");
+            }
+        }
+    }
+    gtk_source_buffer_end_not_undoable_action(pGtkSourceBuffer);
+    pPreviewBuffer->set_modified(false);
+
+    _mdPreviewBuffer = pPreviewBuffer;
+    _mdPreviewWidgets = widgets;
+    _mdPreviewActive = true;
+    apply_syntax_highlighting(pPreviewBuffer, CtConst::RICH_TEXT_ID, false/*forceReApply*/);
+    _ctTextview.setup_for_syntax(CtConst::RICH_TEXT_ID);
+    _ctTextview.set_buffer(pPreviewBuffer);
+    _ctTextview.set_spell_check(false);
+    auto& textView = _ctTextview.mm();
+    textView.set_editable(false);
+    textView.set_sensitive(true);
+    for (CtAnchoredWidget* pWidget : widgets) {
+        Glib::RefPtr<Gtk::TextChildAnchor> pChildAnchor = pWidget->getTextChildAnchor();
+        if (pChildAnchor) {
+            textView.add_child_at_anchor(*pWidget, pChildAnchor);
+            pWidget->apply_width_height(textView.get_allocation().get_width());
+            pWidget->apply_syntax_highlighting(false/*forceReApply*/);
+        }
+    }
+    textView.show_all();
+    pPreviewBuffer->place_cursor(pPreviewBuffer->begin());
+    user_active() = user_active_restore;
+#else
+    (void)treeIter;
+#endif
+}
+
+void CtMainWin::md_view_after_buffer_applied(CtTreeIter treeIter, CtTextView* pCtTextView)
+{
+    if (pCtTextView != &_ctTextview) return; // codeboxes and tables have their own text views
+    _md_preview_drop();
+    if (not treeIter or not is_markdown_syntax(treeIter.get_node_syntax_highlighting())) {
+        _md_view_buttons_update(false/*show*/, false/*preview*/);
+        return;
+    }
+    bool preview = _pCtConfig->mdPreviewDefault;
+    const auto it = _mdNodeRawView.find(treeIter.get_node_id());
+    if (it != _mdNodeRawView.end()) {
+        preview = not it->second;
+    }
+    if (preview) {
+        _md_preview_show(treeIter);
+    }
+    _md_view_buttons_update(true/*show*/, preview);
+}
+
+void CtMainWin::md_toggle_view(const bool preview)
+{
+    CtTreeIter treeIter = curr_tree_iter();
+    if (not treeIter or not is_markdown_syntax(treeIter.get_node_syntax_highlighting())) {
+        return;
+    }
+    _mdNodeRawView[treeIter.get_node_id()] = not preview;
+    if (preview == _mdPreviewActive) {
+        _md_view_buttons_update(true/*show*/, preview);
+        return;
+    }
+    // re-applying the node buffer drops the preview and then applies the chosen view
+    _uCtTreestore->text_view_apply_textbuffer(treeIter, &_ctTextview);
+    if (not preview) {
+        _ctTextview.mm().grab_focus();
+    }
+}
+
+bool CtMainWin::md_leave_preview_for_edit()
+{
+    if (not _mdPreviewActive) return false;
+    md_toggle_view(false/*preview*/);
+    return true;
 }
 
 void CtMainWin::_resolve_bookmarks_submenus()

@@ -101,6 +101,8 @@ public:
     // the built-in editor style schemes (user-1 dark, user-2 light) and the tree explorer
     // light/dark presets follow the effective light/dark appearance
     bool                                        coloursFollowAppearance{true};
+    // Markdown/Remarkup nodes open in the rendered Preview (true) or in the Raw source editor
+    bool                                        mdPreviewDefault{true};
     bool                                        showNodeNameHeader{true};
     int                                         nodesOnNodeNameHeader{3};
     int                                         maxMatchesInPage{500};

@@ -98,6 +98,7 @@ std::vector<CtTextParser::token_schema> CtMDParser::_token_schemas()
 
             doc_builder().add_text(title, false);
             doc_builder().add_link(url);
+            doc_builder().close_current_tag(); // text following the link must not inherit it
         }, ")", true},
         // Monospace
         {"`", true, true, [this](const std::string& data){
@@ -155,17 +156,9 @@ std::vector<CtTextParser::token_schema> CtMDParser::_token_schemas()
         {"***\n", true, false, [this](const std::string&){
             doc_builder().add_hrule();
         }, " "},
-        // Tables
+        // Tables are handled line by line in CtMDParser::feed, not here:
+        // the token based approach broke on padded cells and on text following a table
 
-        // Table row
-        {"|", true, false, [this](const std::string& data){
-            //spdlog::debug("Got end: {}", data);
-            _add_table_cell(data);
-        }, "\n"},
-        // Table header divider
-        {"| -", true, false, [](const std::string&){
-            // Since cherrytree tables don't use headers, this is not needed
-        }, "- |\n"},
         // Image link
         {"![", true, false, [this](const std::string& data){
             auto last_pos = data.find_last_of(']');
@@ -207,6 +200,86 @@ void CtMDParser::_place_free_text()
 
 void CtMDParser::feed(const Glib::ustring& buffer)
 {
+    // Line based pre-pass: table blocks (consecutive lines starting with '|') are
+    // extracted and built directly, everything else goes through the tokenizer.
+    // Lines inside fenced code blocks are never treated as tables.
+    std::vector<Glib::ustring> lines;
+    {
+        Glib::ustring::size_type start = 0;
+        while (start <= buffer.size()) {
+            const auto nl = buffer.find('\n', start);
+            if (nl == Glib::ustring::npos) {
+                if (start < buffer.size()) lines.push_back(buffer.substr(start));
+                break;
+            }
+            lines.push_back(buffer.substr(start, nl - start + 1)); // keep the newline
+            start = nl + 1;
+        }
+    }
+    auto is_table_line = [](const Glib::ustring& line) {
+        const auto first = line.find_first_not_of(" \t");
+        return first != Glib::ustring::npos && line[first] == '|';
+    };
+    auto is_fence_line = [](const Glib::ustring& line) {
+        const auto first = line.find_first_not_of(" \t");
+        if (first == Glib::ustring::npos) return false;
+        const Glib::ustring rest = line.substr(first, 3);
+        return rest == "```" || rest == "~~~";
+    };
+    Glib::ustring pending;
+    bool in_fence = false;
+    for (std::size_t i = 0; i < lines.size();) {
+        if (!in_fence && is_table_line(lines[i])) {
+            std::vector<Glib::ustring> table_lines;
+            while (i < lines.size() && is_table_line(lines[i])) {
+                table_lines.push_back(lines[i]);
+                ++i;
+            }
+            if (!pending.empty()) { _feed_tokens(pending); pending.clear(); }
+            _feed_table_block(table_lines);
+            continue;
+        }
+        if (is_fence_line(lines[i])) in_fence = !in_fence;
+        pending += lines[i];
+        ++i;
+    }
+    if (!pending.empty()) _feed_tokens(pending);
+}
+
+void CtMDParser::_feed_table_block(const std::vector<Glib::ustring>& lines)
+{
+    TableMatrix matrix;
+    std::size_t num_cols = 0;
+    for (const Glib::ustring& raw_line : lines) {
+        Glib::ustring line = str::trim(raw_line);
+        if (line.empty()) continue;
+        if (line[0] == '|') line.erase(0, 1);
+        if (!line.empty() && line[line.size() - 1] == '|') line.erase(line.size() - 1);
+        TableRow row;
+        for (const Glib::ustring& cell : str::split(line, "|")) {
+            row.push_back(str::trim(cell));
+        }
+        // header divider: every cell made of '-' and ':' only
+        bool is_divider = !row.empty();
+        for (const Glib::ustring& cell : row) {
+            if (cell.empty() || cell.find_first_not_of("-: ") != Glib::ustring::npos) { is_divider = false; break; }
+        }
+        if (is_divider) continue;
+        num_cols = std::max(num_cols, row.size());
+        matrix.push_back(std::move(row));
+    }
+    if (matrix.empty()) return;
+    for (TableRow& row : matrix) {
+        while (row.size() < num_cols) row.emplace_back("");
+    }
+    _place_free_text();
+    doc_builder().close_current_tag();
+    doc_builder().add_table(matrix);
+    doc_builder().add_newline();
+}
+
+void CtMDParser::_feed_tokens(const Glib::ustring& buffer)
+{
     try {
         auto tokens_raw = _text_parser->tokenize(buffer);
         auto tokens     = _text_parser->parse_tokens(tokens_raw);
@@ -229,18 +302,11 @@ void CtMDParser::feed(const Glib::ustring& buffer)
             }
             else {
                 if (!iter->second.empty()) {
-                    if (!_current_table.empty() && iter->second == "\n") {
-                        _pop_table();
-                        doc_builder().add_newline();
-                    }
-                    if (_current_table.empty()) {
-                        _free_text += iter->second;
-                    }
+                    _free_text += iter->second;
                 }
             }
             _last_encountered_token = iter->first;
         }
-        if (!_current_table.empty()) _pop_table();
         _place_free_text();
     }
     catch (std::exception& e) {

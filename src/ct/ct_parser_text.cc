@@ -122,7 +122,27 @@ std::vector<std::string> CtTextParser::tokenize(const std::string& text) const
 
         auto pos_token = _possible_tokens.find(*ch);
         if (pos_token != _possible_tokens.end()){
-            auto found_token = branch_token(ch, text.end(), pos_token->second);
+            // Tokens that only make sense at the start of a line (list markers)
+            // must not be matched in the middle of a line, otherwise the closing
+            // '*' of "*italic* text" is taken as a list marker and swallows the rest.
+            static const std::unordered_set<std::string_view> line_start_only_tokens = {"* ", "- "};
+            bool at_line_start = true;
+            for (auto back = ch; back != text.begin();) {
+                --back;
+                if (*back == '\n') break;
+                if (*back != ' ' && *back != '\t') { at_line_start = false; break; }
+            }
+            std::optional<std::string_view> found_token;
+            if (at_line_start) {
+                found_token = branch_token(ch, text.end(), pos_token->second);
+            }
+            else {
+                std::vector<std::string_view> options;
+                for (const auto& opt : pos_token->second) {
+                    if (line_start_only_tokens.find(opt) == line_start_only_tokens.end()) options.push_back(opt);
+                }
+                found_token = branch_token(ch, text.end(), options);
+            }
             if (found_token) {
                 spdlog::debug("TOKEN: {}", *found_token);
                 tokens.emplace_back(last_pos, ch);

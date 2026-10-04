@@ -72,6 +72,12 @@ struct CtWinHeader
 {
     Gtk::Box         headerBox{Gtk::ORIENTATION_HORIZONTAL};
     Gtk::ButtonBox   buttonBox{Gtk::ORIENTATION_HORIZONTAL};
+    // Markdown/Remarkup nodes: Preview (rendered, read only) / Raw (source editor) switch
+    Gtk::Box         mdViewBox{Gtk::ORIENTATION_HORIZONTAL};
+#if GTKMM_MAJOR_VERSION < 4
+    Gtk::RadioButton mdPreviewButton;
+    Gtk::RadioButton mdRawButton;
+#endif
     Gtk::Label       nameLabel;
     Gtk::Image       nodeIcon;
     Gtk::Image       lockIcon;
@@ -258,6 +264,15 @@ public:
 
     void show_hide_win_header(bool visible) { _ctWinHeader.headerBox.property_visible() = visible; }
 
+    // Markdown / Remarkup nodes: rendered read only Preview or Raw source editor
+    static bool is_markdown_syntax(const std::string& syntax);
+    bool md_preview_active() const { return _mdPreviewActive; }
+    // called by CtTreeStore::text_view_apply_textbuffer once a node buffer is in the text view
+    void md_view_after_buffer_applied(CtTreeIter treeIter, CtTextView* pCtTextView);
+    void md_toggle_view(const bool preview);
+    // leave the Preview for the Raw editor when an edit is requested, returns true if it switched
+    bool md_leave_preview_for_edit();
+
     void resetPrevTreeIter()                { _prevTreeIter = CtTreeIter(); }
 
 #if GTKMM_MAJOR_VERSION < 4
@@ -437,6 +452,14 @@ private:
     bool                _alwaysOnTop{false};
     bool                _startDialogShown{false};
     bool                _nativeAppMenubarActive{false};
+    bool                _mdPreviewActive{false};
+    bool                _mdSwitching{false};
+    Glib::RefPtr<Gtk::TextBuffer>   _mdPreviewBuffer;
+    std::list<CtAnchoredWidget*>    _mdPreviewWidgets;
+    std::unordered_map<gint64,bool> _mdNodeRawView; // per node: last chosen view (true = Raw)
+    void _md_preview_show(CtTreeIter treeIter);
+    void _md_preview_drop();
+    void _md_view_buttons_update(const bool show, const bool preview);
 
 public:
     // Unified signals for GTK3/GTK4

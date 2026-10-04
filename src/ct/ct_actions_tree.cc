@@ -53,6 +53,8 @@ bool CtActions::_is_curr_node_not_read_only_or_error()
         CtDialogs::error_dialog(_("The Selected Node is Read Only."), *_pCtMainWin);
         return false;
     }
+    // the rendered Markdown preview is read only: switch to the source editor for the edit
+    (void)_pCtMainWin->md_leave_preview_for_edit();
     return true;
 }
 

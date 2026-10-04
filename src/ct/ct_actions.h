@@ -301,6 +301,7 @@ public:
     void more_nodes_on_node_name_header();
     void less_nodes_on_node_name_header();
     void toggle_fullscreen();
+    void toggle_md_preview();
 
 #if GTKMM_MAJOR_VERSION < 4
     void toggle_always_on_top();
