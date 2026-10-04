@@ -49,7 +49,19 @@ fi
 ARCH="$(uname -m)"
 
 echo "== assembling $APP (version $VERSION, $ARCH)"
-rm -rf "$OUT_DIR"
+# a previous output dir can resist removal while Finder/Spotlight recreate files in it or a
+# previous dmg from it is still mounted: retry, then move it out of the way
+if [ -d "$OUT_DIR" ]; then
+  for attempt in 1 2 3; do
+    rm -rf "$OUT_DIR" 2>/dev/null && break
+    sleep 1
+  done
+  if [ -d "$OUT_DIR" ]; then
+    OLD_DIR="$OUT_DIR.old.$(date +%s)"
+    mv "$OUT_DIR" "$OLD_DIR" || die "cannot remove $OUT_DIR: eject the previously mounted dmg (hdiutil detach /Volumes/$APP_NAME), quit the app and close Finder windows showing that folder"
+    rm -rf "$OLD_DIR" 2>/dev/null || echo "note: leftover $OLD_DIR could not be removed, delete it by hand"
+  fi
+fi
 mkdir -p "$MACOS" "$RES/share/cherrytree" "$FRAMEWORKS"
 cp build/cherrytree "$MACOS/cherrytree"
 
