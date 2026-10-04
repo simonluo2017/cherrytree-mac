@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Remarkup (Phabricator / Phorge markup) syntax highlighting for GtkSourceView.
+ https://we.phorge.it/book/phorge/article/remarkup/
+
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Library General Public
+ License as published by the Free Software Foundation; either
+ version 2 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Library General Public License for more details.
+-->
+<language id="remarkup" _name="Remarkup (Phabricator)" version="2.0" _section="Markup">
+  <metadata>
+    <property name="mimetypes">text/x-remarkup</property>
+    <property name="globs">*.remarkup</property>
+  </metadata>
+
+  <styles>
+    <style id="header"          _name="Header"           map-to="def:type"/>
+    <style id="horizontal-rule" _name="Horizontal Rule"  map-to="def:type"/>
+    <style id="list-marker"     _name="List Marker"      map-to="def:statement"/>
+    <style id="code"            _name="Code"             map-to="def:identifier"/>
+    <style id="code-block"      _name="Code Block"       map-to="def:identifier"/>
+    <style id="emphasis"        _name="Emphasis"         map-to="def:doc-comment-element"/>
+    <style id="strong-emphasis" _name="Strong Emphasis"  map-to="def:statement"/>
+    <style id="highlight"       _name="Highlight"        map-to="def:warning"/>
+    <style id="strikethrough"   _name="Strikethrough"    map-to="def:comment"/>
+    <style id="link-text"       _name="Link Text"        map-to="def:comment"/>
+    <style id="url"             _name="URL"              map-to="def:underlined"/>
+    <style id="object-ref"      _name="Object Reference" map-to="def:constant"/>
+    <style id="callout"         _name="Callout"          map-to="def:error"/>
+    <style id="quote"           _name="Quote"            map-to="def:comment"/>
+    <style id="table"           _name="Table"            map-to="def:type"/>
+  </styles>
+
+  <definitions>
+    <context id="header-equals" style-ref="header">
+      <match>^={1,6}\s.*$</match>
+    </context>
+    <context id="header-hash" style-ref="header">
+      <match>^#{1,6}\s+[^\s].*$</match>
+    </context>
+    <context id="header-underline" style-ref="header">
+      <match>^(={3,}|-{3,})\s*$</match>
+    </context>
+    <context id="horizontal-rule" style-ref="horizontal-rule">
+      <match>^\s*(-{3,}|\*{3,}|_{3,})\s*$</match>
+    </context>
+    <context id="list-marker" style-ref="list-marker">
+      <match>^\s*([-*#]+|[0-9]+[.)])\s(\[[ xX]\]\s)?</match>
+    </context>
+    <context id="callout" style-ref="callout">
+      <match>^\s*(NOTE:|WARNING:|IMPORTANT:|\(NOTE\)|\(WARNING\)|\(IMPORTANT\))</match>
+    </context>
+    <context id="quote" style-ref="quote">
+      <match>^\s*&gt;.*$</match>
+    </context>
+    <context id="table" style-ref="table">
+      <match>^\s*\|.*$</match>
+    </context>
+
+    <context id="code-block" style-ref="code-block">
+      <start>^\s*(```|~~~)</start>
+      <end>^\s*\%{1@start}\s*$</end>
+    </context>
+    <context id="literal-block" style-ref="code-block">
+      <start>^\s*%%%\s*$</start>
+      <end>^\s*%%%\s*$</end>
+    </context>
+    <context id="indented-code" style-ref="code-block">
+      <match>^  [^\s*#-].*$</match>
+    </context>
+
+    <context id="inline-code-backtick" style-ref="code">
+      <match>`[^`\n]+`</match>
+    </context>
+    <context id="inline-code-hash" style-ref="code">
+      <match>##[^#\n]+##</match>
+    </context>
+    <context id="strong-emphasis" style-ref="strong-emphasis">
+      <match>\*\*[^*\n]+\*\*</match>
+    </context>
+    <context id="emphasis" style-ref="emphasis">
+      <match>(?&lt;!:)//[^/\n]+//</match>
+    </context>
+    <context id="highlight" style-ref="highlight">
+      <match>!![^!\n]+!!</match>
+    </context>
+    <context id="strikethrough" style-ref="strikethrough">
+      <match>~~[^~\n]+~~</match>
+    </context>
+    <context id="underline" style-ref="emphasis">
+      <match>__[^_\n]+__</match>
+    </context>
+    <context id="wiki-link" style-ref="link-text">
+      <match>\[\[[^\]\n]+\]\]</match>
+    </context>
+    <context id="md-link" style-ref="link-text">
+      <match>\[[^\]\n]+\]\([^)\n]+\)</match>
+    </context>
+    <context id="url" style-ref="url">
+      <match>(https?|ftp)://[^\s&lt;&gt;]+</match>
+    </context>
+    <context id="object-ref" style-ref="object-ref">
+      <match>(\{[TDPMFVZQE][0-9]+(#[^\s}]+)?\}|(?&lt;![A-Za-z0-9_])[TDPMFVZQE][0-9]+(#\S+)?\b|(?&lt;![A-Za-z0-9_])[@#][A-Za-z_][A-Za-z0-9_.-]*)</match>
+    </context>
+
+    <context id="remarkup" class="no-spell-check">
+      <include>
+        <context ref="code-block"/>
+        <context ref="literal-block"/>
+        <context ref="header-equals"/>
+        <context ref="header-hash"/>
+        <context ref="header-underline"/>
+        <context ref="horizontal-rule"/>
+        <context ref="callout"/>
+        <context ref="quote"/>
+        <context ref="table"/>
+        <context ref="list-marker"/>
+        <context ref="indented-code"/>
+        <context ref="inline-code-backtick"/>
+        <context ref="inline-code-hash"/>
+        <context ref="strong-emphasis"/>
+        <context ref="emphasis"/>
+        <context ref="highlight"/>
+        <context ref="strikethrough"/>
+        <context ref="underline"/>
+        <context ref="wiki-link"/>
+        <context ref="md-link"/>
+        <context ref="url"/>
+        <context ref="object-ref"/>
+      </include>
+    </context>
+  </definitions>
+</language>

@@ -77,6 +77,7 @@ set(CT_SHARED_FILES
   ct_text_view.cc
   ct_parser_text.cc
   ct_parser_md.cc
+  ct_parser_remarkup.cc
   ct_parser_html.cc
   ct_parser.cc
   ct_filesystem.cc

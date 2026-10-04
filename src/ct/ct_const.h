@@ -618,6 +618,7 @@ const inline static std::vector<std::pair<const gchar*, const gchar*>> NODE_CODE
     std::make_pair("lua",           "ct_lua"),
     std::make_pair("markdown",      "ct_markdown"),
     std::make_pair("markdown-extra","ct_markdown"),
+    std::make_pair("remarkup",      "ct_markdown"),
     std::make_pair("matlab",        "ct_matlab"),
     std::make_pair("meson",         "ct_meson"),
     std::make_pair("perl",          "ct_perl"),

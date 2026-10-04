@@ -272,6 +272,9 @@ public:
     void md_toggle_view(const bool preview);
     // leave the Preview for the Raw editor when an edit is requested, returns true if it switched
     bool md_leave_preview_for_edit();
+    // Remarkup object reference (T123, D45, F12, @user, #project) to a node of this document:
+    // a node named exactly like the reference, or whose name starts with it ("T123 Fix login")
+    std::optional<gint64> md_resolve_object_reference(const Glib::ustring& reference);
 
     void resetPrevTreeIter()                { _prevTreeIter = CtTreeIter(); }
 

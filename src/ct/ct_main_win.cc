@@ -105,6 +105,7 @@ void CtMainWin::init_app_actions_gtk4()
 #include "ct_storage_control.h"
 #include "ct_storage_xml.h"
 #include "ct_parser.h"
+#include "ct_parser_remarkup.h"
 #include "ct_clipboard.h"
 #include "ct_dialogs.h"
 
@@ -1275,17 +1276,32 @@ void CtMainWin::_md_preview_show(CtTreeIter treeIter)
 #if GTKMM_MAJOR_VERSION < 4 && !defined(GTKMM_DISABLE_DEPRECATED)
     Glib::RefPtr<Gtk::TextBuffer> pSourceBuffer = treeIter.get_node_text_buffer();
     if (not pSourceBuffer) return;
-    // render the source into a rich text buffer with the Markdown parser used by the import
-    CtMDParser parser{_pCtConfig};
-    parser.wipe_doc();
-    parser.feed(pSourceBuffer->get_text());
+    // render the source into a rich text buffer: Remarkup with its own parser,
+    // Markdown with the parser used by the import
+    xmlpp::Node* pRoot{nullptr};
+    std::unique_ptr<CtMDParser> pMdParser;
+    std::unique_ptr<CtRemarkupParser> pRemarkupParser;
+    if ("remarkup" == treeIter.get_node_syntax_highlighting()) {
+        pRemarkupParser = std::make_unique<CtRemarkupParser>(_pCtConfig);
+        pRemarkupParser->set_ref_resolver([this](const Glib::ustring& reference) {
+            return md_resolve_object_reference(reference);
+        });
+        pRemarkupParser->feed(pSourceBuffer->get_text());
+        pRoot = pRemarkupParser->root_node();
+    }
+    else {
+        pMdParser = std::make_unique<CtMDParser>(_pCtConfig);
+        pMdParser->wipe_doc();
+        pMdParser->feed(pSourceBuffer->get_text());
+        pRoot = pMdParser->doc().root_node();
+    }
     Glib::RefPtr<Gtk::TextBuffer> pPreviewBuffer = get_new_text_buffer();
     std::list<CtAnchoredWidget*> widgets;
     auto pGtkSourceBuffer = GTK_SOURCE_BUFFER(pPreviewBuffer->gobj());
     gtk_source_buffer_begin_not_undoable_action(pGtkSourceBuffer);
     const bool user_active_restore = user_active();
     user_active() = false;
-    if (xmlpp::Node* pRoot = parser.doc().root_node()) {
+    if (pRoot) {
         for (xmlpp::Node* xml_slot : pRoot->get_children("slot")) {
             for (xmlpp::Node* child : xml_slot->get_children()) {
                 Gtk::TextIter insert_iter = pPreviewBuffer->get_insert()->get_iter();
@@ -1364,6 +1380,39 @@ bool CtMainWin::md_leave_preview_for_edit()
     if (not _mdPreviewActive) return false;
     md_toggle_view(false/*preview*/);
     return true;
+}
+
+std::optional<gint64> CtMainWin::md_resolve_object_reference(const Glib::ustring& reference)
+{
+    if (reference.empty()) return std::nullopt;
+    // candidates: "T123", and for @user / #project also the bare name
+    std::vector<Glib::ustring> candidates{reference.lowercase()};
+    if (reference[0] == '@' or reference[0] == '#') {
+        candidates.push_back(reference.substr(1).lowercase());
+    }
+    std::optional<gint64> exact_match;
+    std::optional<gint64> prefix_match;
+    const CtTreeModelColumns& columns = _uCtTreestore->get_columns();
+    _uCtTreestore->get_store()->foreach_iter([&](const Gtk::TreeModel::iterator& iter) {
+        const Glib::ustring node_name = Glib::ustring{iter->get_value(columns.colNodeName)}.lowercase();
+        for (const Glib::ustring& candidate : candidates) {
+            if (node_name == candidate) {
+                exact_match = iter->get_value(columns.colNodeUniqueId);
+                return true; /* stop */
+            }
+            if (not prefix_match and node_name.size() > candidate.size() and
+                str::startswith(node_name, candidate))
+            {
+                const gunichar next = node_name[candidate.size()];
+                if (next == ' ' or next == ':' or next == '-' or next == '_' or next == '.' or next == '/') {
+                    prefix_match = iter->get_value(columns.colNodeUniqueId);
+                }
+            }
+        }
+        return false; /* continue */
+    });
+    if (exact_match) return exact_match;
+    return prefix_match;
 }
 
 void CtMainWin::_resolve_bookmarks_submenus()
