@@ -267,6 +267,8 @@ void CtConfig::_populate_keyfile_from_data()
     _uKeyFile->set_boolean(_currentGroup, "native_chrome", nativeChrome);
     _uKeyFile->set_boolean(_currentGroup, "colours_follow_appearance", coloursFollowAppearance);
     _uKeyFile->set_boolean(_currentGroup, "md_preview_default", mdPreviewDefault);
+    _uKeyFile->set_integer(_currentGroup, "editor_look", editorLook);
+    _uKeyFile->set_string(_currentGroup, "editor_look_backup", editorLookBackup);
     _uKeyFile->set_boolean(_currentGroup, "show_node_name_header", showNodeNameHeader);
     _uKeyFile->set_integer(_currentGroup, "nodes_on_node_name_header", nodesOnNodeNameHeader);
     _uKeyFile->set_integer(_currentGroup, "max_matches_in_page", maxMatchesInPage);
@@ -578,6 +580,9 @@ void CtConfig::_populate_data_from_keyfile()
     _populate_bool_from_keyfile("native_chrome", &nativeChrome);
     _populate_bool_from_keyfile("colours_follow_appearance", &coloursFollowAppearance);
     _populate_bool_from_keyfile("md_preview_default", &mdPreviewDefault);
+    _populate_int_from_keyfile("editor_look", &editorLook);
+    if (editorLook < 0 or editorLook > 1) editorLook = 0;
+    _populate_string_from_keyfile("editor_look_backup", &editorLookBackup);
     _populate_bool_from_keyfile("show_node_name_header", &showNodeNameHeader);
     _populate_int_from_keyfile("nodes_on_node_name_header", &nodesOnNodeNameHeader);
     _populate_int_from_keyfile("max_matches_in_page", &maxMatchesInPage);
@@ -939,3 +944,86 @@ Gdk::RGBA CtConfig::get_style_scheme_bg_color(const std::string& scheme_name) co
     return default_bg;
 }
 
+
+// the keys overridden by the TextMate look, serialised in this order
+bool CtConfig::apply_editor_look(const int look, const bool preferDark)
+{
+    if (look == editorLook) return false;
+    const char SEP = '\x1f';
+    if (1 == look) {
+        // snapshot the user's values so that switching back is lossless
+        std::vector<std::string> values{
+            rtFont.raw(), ptFont.raw(), codeFont.raw(),
+            rtStyleScheme, ptStyleScheme, taStyleScheme, coStyleScheme,
+            showLineNumbers ? "1" : "0", rtHighlCurrLine ? "1" : "0", ptHighlCurrLine ? "1" : "0",
+            std::to_string(spaceAroundLines), std::to_string(textMarginLeft), std::to_string(textMarginRight),
+            rtShowWhiteSpaces ? "1" : "0", ptShowWhiteSpaces ? "1" : "0",
+            std::to_string(rtResetFontSize), std::to_string(ptResetFontSize), std::to_string(codeResetFontSize)};
+        editorLookBackup = str::join(values, std::string{SEP});
+#ifdef __APPLE__
+        const char* const monoFont = "Menlo 12";
+#else
+        const char* const monoFont = "Monospace 11";
+#endif
+        rtFont = monoFont;
+        ptFont = monoFont;
+        codeFont = monoFont;
+        rtResetFontSize = 0;
+        ptResetFontSize = 0;
+        codeResetFontSize = 0;
+        const std::string scheme = preferDark ? "textmate-dark" : "textmate-light";
+        rtStyleScheme = scheme;
+        ptStyleScheme = scheme;
+        taStyleScheme = scheme;
+        coStyleScheme = scheme;
+        showLineNumbers = true;
+        rtHighlCurrLine = true;
+        ptHighlCurrLine = true;
+        spaceAroundLines = 2;
+        textMarginLeft = 12;
+        textMarginRight = 12;
+        rtShowWhiteSpaces = false;
+        ptShowWhiteSpaces = false;
+    }
+    else {
+        std::vector<std::string> values = str::split(editorLookBackup, std::string{SEP}.c_str());
+        if (values.size() >= 18) {
+            rtFont = values[0];
+            ptFont = values[1];
+            codeFont = values[2];
+            rtStyleScheme = values[3];
+            ptStyleScheme = values[4];
+            taStyleScheme = values[5];
+            coStyleScheme = values[6];
+            showLineNumbers = "1" == values[7];
+            rtHighlCurrLine = "1" == values[8];
+            ptHighlCurrLine = "1" == values[9];
+            spaceAroundLines = std::atoi(values[10].c_str());
+            textMarginLeft = std::atoi(values[11].c_str());
+            textMarginRight = std::atoi(values[12].c_str());
+            rtShowWhiteSpaces = "1" == values[13];
+            ptShowWhiteSpaces = "1" == values[14];
+            rtResetFontSize = std::atoi(values[15].c_str());
+            ptResetFontSize = std::atoi(values[16].c_str());
+            codeResetFontSize = std::atoi(values[17].c_str());
+        }
+        else {
+            // no snapshot: fall back to the defaults
+            rtFont = CtConst::FONT_RT_DEFAULT;
+            ptFont = CtConst::FONT_PT_DEFAULT;
+            codeFont = CtConst::FONT_CODE_DEFAULT;
+            rtStyleScheme = preferDark ? "user-1" : "user-2";
+            ptStyleScheme = rtStyleScheme;
+            taStyleScheme = "user-2";
+            coStyleScheme = "cobalt-darkened";
+            showLineNumbers = false;
+            spaceAroundLines = 0;
+            textMarginLeft = 7;
+            textMarginRight = 7;
+            ptShowWhiteSpaces = true;
+        }
+        editorLookBackup.clear();
+    }
+    editorLook = look;
+    return true;
+}

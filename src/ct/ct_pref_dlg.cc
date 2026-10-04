@@ -431,6 +431,26 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     checkbutton_native_chrome->set_active(_pConfig->nativeChrome);
     auto checkbutton_md_preview = Gtk::manage(new Gtk::CheckButton{_("Open Markdown Nodes in the Rendered Preview (Raw to edit)")});
     checkbutton_md_preview->set_active(_pConfig->mdPreviewDefault);
+    auto hbox_editor_look = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 6/*spacing*/});
+    auto label_editor_look = Gtk::manage(new Gtk::Label{_("Editor Look")});
+#if GTKMM_MAJOR_VERSION >= 4
+    auto radiobutton_look_cherrytree = Gtk::manage(new Gtk::CheckButton{_("CherryTree")});
+    auto radiobutton_look_textmate = Gtk::manage(new Gtk::CheckButton{_("TextMate")});
+    radiobutton_look_textmate->set_group(*radiobutton_look_cherrytree);
+    hbox_editor_look->append(*label_editor_look);
+    hbox_editor_look->append(*radiobutton_look_cherrytree);
+    hbox_editor_look->append(*radiobutton_look_textmate);
+#else
+    auto radiobutton_look_cherrytree = Gtk::manage(new Gtk::RadioButton{_("CherryTree")});
+    auto radiobutton_look_textmate = Gtk::manage(new Gtk::RadioButton{_("TextMate")});
+    radiobutton_look_textmate->join_group(*radiobutton_look_cherrytree);
+    hbox_editor_look->pack_start(*label_editor_look, false, false);
+    hbox_editor_look->pack_start(*radiobutton_look_cherrytree, false, false);
+    hbox_editor_look->pack_start(*radiobutton_look_textmate, false, false);
+#endif
+    radiobutton_look_cherrytree->set_active(0 == _pConfig->editorLook);
+    radiobutton_look_textmate->set_active(1 == _pConfig->editorLook);
+    hbox_editor_look->set_tooltip_text(_("TextMate: Menlo monospace text, clean light/dark colour schemes, line numbers, current line highlight and roomy margins. Your own fonts and schemes are restored when switching back to CherryTree."));
     auto checkbutton_native_menubar = Gtk::manage(new Gtk::CheckButton{_("Native Application Menubar (Global Menu Bar on macOS)")});
     checkbutton_native_menubar->set_active(_pConfig->nativeAppMenubar);
     checkbutton_native_menubar->set_tooltip_text(_("The menu is exported by the application: on macOS it is the global menu bar with Command key shortcuts."));
@@ -439,6 +459,7 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     vbox_appearance->append(*checkbutton_colours_follow);
     vbox_appearance->append(*checkbutton_native_chrome);
     vbox_appearance->append(*checkbutton_md_preview);
+    vbox_appearance->append(*hbox_editor_look);
     checkbutton_native_menubar->set_sensitive(false); // GTK4 always uses the menu model
     vbox_appearance->append(*checkbutton_native_menubar);
 #else
@@ -446,6 +467,7 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     vbox_appearance->pack_start(*checkbutton_colours_follow, false, false);
     vbox_appearance->pack_start(*checkbutton_native_chrome, false, false);
     vbox_appearance->pack_start(*checkbutton_md_preview, false, false);
+    vbox_appearance->pack_start(*hbox_editor_look, false, false);
     vbox_appearance->pack_start(*checkbutton_native_menubar, false, false);
 #endif
     Gtk::Frame* frame_appearance = new_managed_frame_with_align(_("Appearance"), vbox_appearance);
@@ -487,6 +509,26 @@ Gtk::Widget* CtPrefDlg::build_tab_interface()
     });
     checkbutton_md_preview->signal_toggled().connect([this, checkbutton_md_preview](){
         _pConfig->mdPreviewDefault = checkbutton_md_preview->get_active();
+    });
+    auto f_on_editor_look_changed = [this, fontbutton_rt, fontbutton_pt, fontbutton_code](const int look) {
+        const bool preferDark = Gtk::Settings::get_default()->property_gtk_application_prefer_dark_theme();
+        if (not _pConfig->apply_editor_look(look, preferDark)) return;
+#if GTKMM_MAJOR_VERSION >= 4
+        fontbutton_rt->set_font(_pConfig->rtFont);
+        fontbutton_pt->set_font(_pConfig->ptFont);
+        fontbutton_code->set_font(_pConfig->codeFont);
+#else
+        fontbutton_rt->set_font_name(_pConfig->rtFont);
+        fontbutton_pt->set_font_name(_pConfig->ptFont);
+        fontbutton_code->set_font_name(_pConfig->codeFont);
+#endif
+        apply_for_each_window([](CtMainWin* win) { win->apply_editor_look(); });
+    };
+    radiobutton_look_cherrytree->signal_toggled().connect([radiobutton_look_cherrytree, f_on_editor_look_changed](){
+        if (radiobutton_look_cherrytree->get_active()) f_on_editor_look_changed(0);
+    });
+    radiobutton_look_textmate->signal_toggled().connect([radiobutton_look_textmate, f_on_editor_look_changed](){
+        if (radiobutton_look_textmate->get_active()) f_on_editor_look_changed(1);
     });
     checkbutton_native_menubar->signal_toggled().connect([this, checkbutton_native_menubar](){
         _pConfig->nativeAppMenubar = checkbutton_native_menubar->get_active();

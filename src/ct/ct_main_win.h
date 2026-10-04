@@ -120,6 +120,8 @@ public:
     // coloursFollowAppearance the built-in editor schemes and tree presets follow it.
     // refresh_views: reapply the schemes to the loaded buffers (not needed at startup)
     void apply_ui_appearance(const bool refresh_views);
+    // re-apply the editor look (fonts, schemes, line numbers, margins) after CtConfig::apply_editor_look
+    void apply_editor_look();
 
     bool file_open(const fs::path& filepath,
                    const std::string& node_to_focus,

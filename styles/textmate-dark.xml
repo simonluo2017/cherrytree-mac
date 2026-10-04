@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ TextMate "Twilight" inspired dark scheme for CherryTree.
+
+ This library is free software; you can redistribute it and/or
+ modify it under the terms of the GNU Lesser General Public
+ License as published by the Free Software Foundation; either
+ version 2.1 of the License, or (at your option) any later version.
+
+ This library is distributed in the hope that it will be useful,
+ but WITHOUT ANY WARRANTY; without even the implied warranty of
+ MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ Lesser General Public License for more details.
+-->
+<style-scheme id="textmate-dark" name="TextMate Dark" version="1.0">
+  <author>CherryTree</author>
+  <_description>Clean dark scheme in the spirit of TextMate's Twilight theme</_description>
+
+  <color name="bg"           value="#141414"/>
+  <color name="text-fg"      value="#F8F8F8"/>
+  <color name="caret"        value="#A7A7A7"/>
+  <color name="selection"    value="#3B4754"/>
+  <color name="line-hl"      value="#1F1F1F"/>
+  <color name="gutter-bg"    value="#1A1A1A"/>
+  <color name="gutter-fg"    value="#5F5A60"/>
+  <color name="margin"       value="#2A2A2A"/>
+  <color name="spaces"       value="#3A3A3A"/>
+  <color name="comment"      value="#5F5A60"/>
+  <color name="keyword"      value="#CDA869"/>
+  <color name="string"       value="#8F9D6A"/>
+  <color name="number"       value="#CF6A4C"/>
+  <color name="constant"     value="#CF6A4C"/>
+  <color name="function"     value="#9B703F"/>
+  <color name="type"         value="#9B859D"/>
+  <color name="variable"     value="#7587A6"/>
+  <color name="support"      value="#DAD085"/>
+  <color name="preprocessor" value="#AFC4DB"/>
+  <color name="search"       value="#5A4A1A"/>
+  <color name="error"        value="#FF6A6A"/>
+  <color name="warning"      value="#E0A040"/>
+
+  <!-- Global Settings -->
+  <style name="text"                        foreground="text-fg" background="bg"/>
+  <style name="cursor"                      foreground="caret"/>
+  <style name="selection"                   background="selection"/>
+  <style name="current-line"                background="line-hl"/>
+  <style name="current-line-number"         background="line-hl" foreground="#9A9A9A"/>
+  <style name="line-numbers"                foreground="gutter-fg" background="gutter-bg"/>
+  <style name="right-margin"                foreground="margin" background="margin"/>
+  <style name="bracket-match"               background="#3A3A3A" bold="true"/>
+  <style name="bracket-mismatch"            background="#5A2A2A"/>
+  <style name="draw-spaces"                 foreground="spaces"/>
+  <style name="background-pattern"          background="#181818"/>
+  <style name="search-match"                background="search"/>
+  <style name="bookmark"                    background="#2A2A3F"/>
+
+  <!-- Comments -->
+  <style name="def:comment"                 foreground="comment" italic="true"/>
+  <style name="def:shebang"                 foreground="comment" bold="true"/>
+  <style name="def:doc-comment"             foreground="comment" italic="true"/>
+  <style name="def:doc-comment-element"     foreground="comment" bold="true"/>
+
+  <!-- Constants -->
+  <style name="def:constant"                foreground="constant"/>
+  <style name="def:decimal"                 foreground="number"/>
+  <style name="def:base-n-integer"          foreground="number"/>
+  <style name="def:floating-point"          foreground="number"/>
+  <style name="def:complex"                 use-style="def:base-n-integer"/>
+  <style name="def:character"               foreground="string"/>
+  <style name="def:string"                  foreground="string"/>
+  <style name="def:special-char"            foreground="constant"/>
+  <style name="def:boolean"                 foreground="constant"/>
+  <style name="def:special-constant"        foreground="constant"/>
+
+  <!-- Identifiers -->
+  <style name="def:identifier"              foreground="variable"/>
+  <style name="def:function"                foreground="function"/>
+  <style name="def:builtin"                 foreground="support"/>
+
+  <!-- Statements -->
+  <style name="def:statement"               foreground="keyword"/>
+  <style name="def:keyword"                 foreground="keyword"/>
+  <style name="def:operator"                foreground="keyword"/>
+
+  <!-- Types -->
+  <style name="def:type"                    foreground="type"/>
+
+  <!-- Markup -->
+  <style name="def:emphasis"                italic="true"/>
+  <style name="def:strong-emphasis"         bold="true"/>
+  <style name="def:inline-code"             foreground="function"/>
+  <style name="def:insertion"               underline="single"/>
+  <style name="def:deletion"                strikethrough="true"/>
+  <style name="def:link-text"               foreground="variable"/>
+  <style name="def:link-symbol"             foreground="variable" bold="true"/>
+  <style name="def:link-destination"        underline="single" foreground="preprocessor"/>
+  <style name="def:heading"                 foreground="keyword" bold="true"/>
+  <style name="def:thematic-break"          foreground="gutter-fg"/>
+  <style name="def:preformatted-section"    foreground="function"/>
+  <style name="def:list-marker"             foreground="keyword" bold="true"/>
+  <style name="def:underlined"              underline="single"/>
+
+  <!-- Others -->
+  <style name="def:preprocessor"            foreground="preprocessor"/>
+  <style name="def:note"                    foreground="#F8F8F8" background="#5A2A2A" bold="true"/>
+  <style name="def:error"                   foreground="error" underline="true"/>
+  <style name="def:warning"                 foreground="warning" underline="true"/>
+  <style name="def:net-address"             foreground="preprocessor" underline="single"/>
+
+  <!-- Language specific styles -->
+  <style name="c:preprocessor"              foreground="preprocessor"/>
+  <style name="c:included-file"             foreground="string"/>
+  <style name="diff:added-line"             foreground="string"/>
+  <style name="diff:removed-line"           foreground="constant"/>
+  <style name="diff:changed-line"           foreground="preprocessor"/>
+  <style name="diff:location"               foreground="type"/>
+  <style name="diff:diff-file"              bold="true"/>
+  <style name="xml:attribute-name"          foreground="variable"/>
+  <style name="xml:element-name"            foreground="keyword"/>
+  <style name="xml:entity"                  foreground="constant"/>
+  <style name="xml:processing-instruction"  bold="true"/>
+  <style name="xml:doctype"                 foreground="type" bold="true"/>
+  <style name="js:built-in-constructor"     foreground="support"/>
+  <style name="python:builtin-function"     foreground="support"/>
+  <style name="python:builtin-constant"     foreground="constant"/>
+  <style name="python:builtin-object"       foreground="support"/>
+  <style name="sh:dollar"                   foreground="variable" bold="true"/>
+  <style name="makefile:trailing-tab"       background="#5A2A2A"/>
+</style-scheme>

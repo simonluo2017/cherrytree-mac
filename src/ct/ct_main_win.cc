@@ -752,20 +752,29 @@ void CtMainWin::apply_ui_appearance(const bool refresh_views)
     if (not _pCtConfig->coloursFollowAppearance) {
         return;
     }
-    // the built-in style schemes: user-1 is light text on dark, user-2 dark text on light.
-    // Only these two are swapped, a custom scheme chosen by the user is left alone.
-    const std::string wantScheme = preferDark ? "user-1" : "user-2";
-    const std::string otherScheme = preferDark ? "user-2" : "user-1";
-    bool rtChanged{false};
-    bool ptChanged{false};
-    if (_pCtConfig->rtStyleScheme == otherScheme) {
-        _pCtConfig->rtStyleScheme = wantScheme;
-        rtChanged = true;
-    }
-    if (_pCtConfig->ptStyleScheme == otherScheme) {
-        _pCtConfig->ptStyleScheme = wantScheme;
-        ptChanged = true;
-    }
+    // the built-in style schemes: user-1 is light text on dark, user-2 dark text on light,
+    // and the TextMate look pair textmate-dark / textmate-light.
+    // Only these pairs are swapped, a custom scheme chosen by the user is left alone.
+    struct SchemePair { const char* dark; const char* light; };
+    static const SchemePair schemePairs[] = {{"user-1", "user-2"}, {"textmate-dark", "textmate-light"}};
+    auto swap_scheme = [preferDark](std::string& scheme)->bool{
+        for (const SchemePair& pair : schemePairs) {
+            const std::string wantScheme = preferDark ? pair.dark : pair.light;
+            const std::string otherScheme = preferDark ? pair.light : pair.dark;
+            if (scheme == otherScheme) {
+                scheme = wantScheme;
+                return true;
+            }
+        }
+        return false;
+    };
+    const bool rtChanged = swap_scheme(_pCtConfig->rtStyleScheme);
+    const bool ptChanged = swap_scheme(_pCtConfig->ptStyleScheme);
+    // codeboxes and tables only follow for the TextMate pair (their user-1/user-2 are not swapped)
+    bool coChanged{false};
+    bool taChanged{false};
+    if (CtConfig::is_textmate_scheme(_pCtConfig->coStyleScheme)) coChanged = swap_scheme(_pCtConfig->coStyleScheme);
+    if (CtConfig::is_textmate_scheme(_pCtConfig->taStyleScheme)) taChanged = swap_scheme(_pCtConfig->taStyleScheme);
     // the tree explorer light/dark presets (custom colours are left alone)
     const bool treeIsLightPreset = _pCtConfig->ttDefFg == CtConst::TREE_TEXT_LIGHT_FG and
                                    _pCtConfig->ttDefBg == CtConst::TREE_TEXT_LIGHT_BG and
@@ -790,12 +799,34 @@ void CtMainWin::apply_ui_appearance(const bool refresh_views)
     }
     if (refresh_views) {
         if (rtChanged) reapply_syntax_highlighting('r'/*RichText*/);
-        if (ptChanged) reapply_syntax_highlighting('p'/*PlainTextNCode*/);
+        if (ptChanged or coChanged) reapply_syntax_highlighting('p'/*PlainTextNCode*/);
+        if (taChanged) reapply_syntax_highlighting('t'/*Table*/);
         if (treeChanged) {
             update_theme();
             window_header_update();
         }
     }
+}
+
+void CtMainWin::apply_editor_look()
+{
+    auto pGtkSourceView = GTK_SOURCE_VIEW(_ctTextview.gobj());
+    auto& textView = _ctTextview.mm();
+    gtk_source_view_set_show_line_numbers(pGtkSourceView, _pCtConfig->showLineNumbers);
+    textView.set_pixels_above_lines(_pCtConfig->spaceAroundLines);
+    textView.set_pixels_below_lines(_pCtConfig->spaceAroundLines);
+    _ctTextview.set_pixels_inside_wrap(_pCtConfig->spaceAroundLines, _pCtConfig->relativeWrappedSpace);
+    textView.set_left_margin(_pCtConfig->textMarginLeft);
+    textView.set_right_margin(_pCtConfig->textMarginRight);
+    update_theme();
+    reapply_syntax_highlighting('r'/*RichText*/);
+    reapply_syntax_highlighting('p'/*PlainTextNCode*/);
+    reapply_syntax_highlighting('t'/*Table*/);
+    if (CtTreeIter treeIter = curr_tree_iter()) {
+        // current line highlight and whitespace drawing are set up per syntax
+        _ctTextview.setup_for_syntax(_mdPreviewActive ? std::string{CtConst::RICH_TEXT_ID} : treeIter.get_node_syntax_highlighting());
+    }
+    window_header_update();
 }
 
 void CtMainWin::update_theme()
@@ -1269,6 +1300,8 @@ void CtMainWin::_md_preview_drop()
     }
     _mdPreviewWidgets.clear();
     _mdPreviewBuffer.reset();
+    // line numbers are hidden in the rendered preview, back to the configured state
+    gtk_source_view_set_show_line_numbers(GTK_SOURCE_VIEW(_ctTextview.gobj()), _pCtConfig->showLineNumbers);
 }
 
 void CtMainWin::_md_preview_show(CtTreeIter treeIter)
@@ -1321,6 +1354,7 @@ void CtMainWin::_md_preview_show(CtTreeIter treeIter)
     _ctTextview.set_spell_check(false);
     auto& textView = _ctTextview.mm();
     textView.set_editable(false);
+    gtk_source_view_set_show_line_numbers(GTK_SOURCE_VIEW(_ctTextview.gobj()), false); // a rendered document has no source lines
     textView.set_sensitive(true);
     for (CtAnchoredWidget* pWidget : widgets) {
         Glib::RefPtr<Gtk::TextChildAnchor> pChildAnchor = pWidget->getTextChildAnchor();

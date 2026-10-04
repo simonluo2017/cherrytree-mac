@@ -65,6 +65,22 @@
 
 找到就渲染成指向该节点的内部链接，点击即跳转；找不到则显示为灰色等宽文字，不会报错。
 
+## 编辑器外观：CherryTree / TextMate
+
+Preferences → Interface → Appearance → **Editor Look** 单选：
+
+| | CherryTree | TextMate |
+| --- | --- | --- |
+| 字体 | 你自己的设置 | Menlo 12（富文本、纯文本、代码统一；非 macOS 用 Monospace 11） |
+| 配色 | 你自己的 scheme | `textmate-light`（Mac Classic 风格：白底、淡蓝当前行、浅灰行号栏）/ `textmate-dark`（Twilight 风格），随浅色/深色外观自动切换 |
+| 行号 / 当前行高亮 | 你自己的设置 | 开 |
+| 行距 / 左右边距 | 你自己的设置 | 2px / 12px |
+| 空白字符显示 | 你自己的设置 | 关 |
+
+- 切到 TextMate 时会把被覆盖的原设置快照保存到配置里（`editor_look_backup`），切回 CherryTree 时原样恢复，不会丢失你的字体和配色。
+- 两套 scheme 文件在 `styles/textmate-light.xml`、`styles/textmate-dark.xml`，也可以单独在 Preferences → Rich Text / Plain Text and Code 里选用。
+- 渲染预览（Markdown/Remarkup 的 Preview）里不显示行号，Raw 模式才显示。
+
 ## 在 Mac 上自己编译运行
 
 1. 安装依赖（Homebrew）：

@@ -103,6 +103,14 @@ public:
     bool                                        coloursFollowAppearance{true};
     // Markdown/Remarkup nodes open in the rendered Preview (true) or in the Raw source editor
     bool                                        mdPreviewDefault{true};
+    // editor look preset: 0 = CherryTree (the user's own settings), 1 = TextMate
+    // (Menlo, textmate-light/dark schemes, line numbers, current line, roomy margins)
+    int                                         editorLook{0};
+    // the user's own values of the keys the TextMate look overrides, restored on switching back
+    std::string                                 editorLookBackup;
+    // switch the editor look preset, snapshotting/restoring the overridden keys; returns true if changed
+    bool apply_editor_look(const int look, const bool preferDark);
+    static bool is_textmate_scheme(const std::string& scheme) { return "textmate-light" == scheme or "textmate-dark" == scheme; }
     bool                                        showNodeNameHeader{true};
     int                                         nodesOnNodeNameHeader{3};
     int                                         maxMatchesInPage{500};
