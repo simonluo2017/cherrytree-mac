@@ -105,6 +105,28 @@ for so in "$LOADERS_DST"/*.so; do
 done
 dylibbundler "${DYLIBB_ARGS[@]}"
 
+# dylibbundler can add the same LC_RPATH more than once; recent dyld (macOS 26+) refuses to
+# start a binary with duplicate LC_RPATH entries ("duplicate LC_RPATH" abort at launch)
+dedupe_rpaths() {
+  local file="$1"
+  local paths
+  paths="$(otool -l "$file" 2>/dev/null | awk '/cmd LC_RPATH/{getline; getline; print $2}')"
+  local dup
+  for dup in $(printf '%s\n' "$paths" | sort | uniq -d); do
+    local count
+    count="$(printf '%s\n' "$paths" | grep -c -x -- "$dup")"
+    while [ "$count" -gt 1 ]; do
+      install_name_tool -delete_rpath "$dup" "$file" 2>/dev/null || break
+      count=$((count - 1))
+    done
+    echo "   removed duplicate LC_RPATH $dup from ${file#$APP/}"
+  done
+}
+dedupe_rpaths "$MACOS/cherrytree"
+find "$FRAMEWORKS" "$LOADERS_DST" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 | while IFS= read -r -d '' f; do
+  dedupe_rpaths "$f"
+done
+
 # -- icon
 echo "== icon"
 ICONSET="$OUT_DIR/$APP_NAME.iconset"
