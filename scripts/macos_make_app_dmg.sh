@@ -70,6 +70,7 @@ cp -R language-specs styles "$RES/share/cherrytree/"
 mkdir -p "$RES/share/cherrytree/data" "$RES/share/cherrytree/icons"
 cp data/script3.js data/styles4.css data/user-style.xml "$RES/share/cherrytree/data/"
 cp -R data/prompts "$RES/share/cherrytree/data/"
+cp data/models.manifest "$RES/share/cherrytree/data/"
 cp icons/ct_home.svg "$RES/share/cherrytree/icons/"
 cp -R icons/Breeze_Dark_icons icons/Breeze_Light_icons "$RES/share/cherrytree/icons/"
 for lang_dir in po/*/; do

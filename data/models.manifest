@@ -1,0 +1,56 @@
+# CherryTree Mac local model catalog (GLib KeyFile format).
+#
+# Only official publisher repositories on Hugging Face are listed. The app
+# downloads exactly the file named here, resumes interrupted downloads and
+# verifies the SHA256 before the model can be used.
+#
+# sha256 / size_bytes are pinned with scripts/update_model_manifest.py (run it
+# on a machine that can reach huggingface.co and commit the result). While a
+# hash is not pinned here, the app fetches the publisher's LFS hash from the
+# Hugging Face API at download time and verifies against that; the
+# Preferences dialog shows which of the two applies.
+#
+# tier: small | medium | large      min_memory_gb: unified memory needed to run comfortably
+# url: optional explicit download URL (e.g. a mirror); by default the Hugging Face "resolve" URL of repo/file
+
+[qwen2.5-1.5b-instruct-q4_k_m]
+name=Qwen2.5 1.5B Instruct (Q4_K_M)
+tier=small
+publisher=Qwen (Alibaba Cloud)
+repo=Qwen/Qwen2.5-1.5B-Instruct-GGUF
+file=qwen2.5-1.5b-instruct-q4_k_m.gguf
+license=Apache-2.0
+license_url=https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LICENSE
+min_memory_gb=8
+context_train=32768
+description=Fast; tags, summaries, task extraction, simple questions.
+size_bytes=0
+sha256=
+
+[qwen2.5-3b-instruct-q4_k_m]
+name=Qwen2.5 3B Instruct (Q4_K_M)
+tier=medium
+publisher=Qwen (Alibaba Cloud)
+repo=Qwen/Qwen2.5-3B-Instruct-GGUF
+file=qwen2.5-3b-instruct-q4_k_m.gguf
+license=Qwen Research License
+license_url=https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/blob/main/LICENSE
+min_memory_gb=8
+context_train=32768
+description=Balanced default; note Q&A, explanations, mixed Chinese/English notes.
+size_bytes=0
+sha256=
+
+[qwen2.5-7b-instruct-q4_k_m]
+name=Qwen2.5 7B Instruct (Q4_K_M)
+tier=large
+publisher=Qwen (Alibaba Cloud)
+repo=Qwen/Qwen2.5-7B-Instruct-GGUF
+file=qwen2.5-7b-instruct-q4_k_m.gguf
+license=Apache-2.0
+license_url=https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/blob/main/LICENSE
+min_memory_gb=16
+context_train=32768
+description=Best quality; complex questions, code and long notes.
+size_bytes=0
+sha256=

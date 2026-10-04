@@ -29,6 +29,7 @@
 
 CtAiService::CtAiService(CtConfig* pCtConfig)
  : _pCtConfig{pCtConfig}
+ , _modelManager{pCtConfig}
 {
     _dispatcher.connect(sigc::mem_fun(*this, &CtAiService::_on_dispatch));
     reload_prompts();

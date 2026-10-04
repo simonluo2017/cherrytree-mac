@@ -23,6 +23,7 @@
 #pragma once
 
 #include "ct_ai_provider.h"
+#include "ct_ai_models.h"
 #include "ct_filesystem.h"
 
 #include <glibmm.h>
@@ -57,6 +58,7 @@ public:
     const std::map<std::string, CtAiPrompt>& prompts() const { return _prompts; }
     const CtAiPrompt* prompt(const std::string& id) const;
     void reload_prompts();
+    CtModelManager& model_manager() { return _modelManager; }
     /// fill the template variables
     static std::string render(const std::string& tmpl, const std::map<std::string, std::string>& vars);
     CtAiRequest build_request(const CtAiPrompt& prompt, const std::map<std::string, std::string>& vars) const;
@@ -81,6 +83,7 @@ private:
     void _restart_unload_timer();
 
     CtConfig* const _pCtConfig;
+    CtModelManager _modelManager;
     std::unique_ptr<CtAiProvider> _uProvider;
     std::map<std::string, CtAiPrompt> _prompts;
 

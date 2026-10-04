@@ -82,7 +82,17 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 
 完全在本机运行，没有任何网络请求。推理后端是 vendor 进仓库的 llama.cpp（`third_party/llama.cpp`，锁定 commit，见其中的 `VENDOR.md`），macOS 上用 Metal，模型格式 GGUF。
 
-**配置**：Preferences → AI (Local Model)：选择 `.gguf` 文件、上下文长度、回答长度上限、temperature、线程数、空闲多少分钟自动卸载模型。模型文件现阶段由你自己下载放到本机（下一步做应用内一键下载）。
+**配置**：Preferences → AI (Local Model)：选择 `.gguf` 文件、上下文长度、回答长度上限、temperature、线程数、空闲多少分钟自动卸载模型。
+
+**一键下载（Model Catalog）**：同一页顶部是模型目录，来自仓库内 `data/models.manifest`（只收录发布方官方 Hugging Face 仓库）。
+
+- 显示本机统一内存和推荐档位（★），每个条目有来源仓库、许可证、大小、SHA256 的链接和说明。
+- 选中 → Download：先弹确认框列出来源 URL / 许可证 / 大小 / 校验方式；下载到 `~/Library/Application Support/cherrytree-mac/models/`（Linux 为 `~/.local/share/cherrytree/models/`），支持断点续传（中断后再点 Download 从 `.part` 继续；服务器不支持 Range 时自动从头下）。
+- 下载完成后计算 SHA256：与目录中固定的哈希比对；目录里还没固定哈希的条目，使用发布方在 Hugging Face 的 LFS 元数据哈希（下载前先取得，取不到就拒绝下载）。不匹配即删除文件并报错。通过后在模型旁写 `<文件>.sha256` 记录哈希与来源。
+- Use This Model 把它设为当前模型；Delete 删除文件；关闭对话框不会中断下载。
+- 固定哈希：在能访问 huggingface.co 的机器上运行 `python3 scripts/update_model_manifest.py`，它把每个文件的大小和 LFS SHA256 写回 manifest，提交后 app 就只信任仓库里的哈希。
+- manifest 条目可加 `url=` 指定镜像地址（例如国内镜像），默认用 Hugging Face 的 resolve 地址。
+- 用户自己放入的模型文件走 "Model File (GGUF)" 一栏，不经过校验，视为 Custom / Unverified。
 
 **功能**（Tools → AI (Local Model)）：
 

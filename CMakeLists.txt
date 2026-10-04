@@ -374,8 +374,10 @@ if(${CMAKE_SYSTEM_NAME} MATCHES Linux|.*BSD|DragonFly|Darwin)
           "${CMAKE_SOURCE_DIR}/data/styles4.css"
           "${CMAKE_SOURCE_DIR}/data/user-style.xml"
           DESTINATION "${CHERRYTREE_SHARE_INSTALL}/data")
-  # share/cherrytree data/prompts (local AI prompt templates)
+  # share/cherrytree data/prompts (local AI prompt templates) and the model catalog
   install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/prompts
+          DESTINATION "${CHERRYTREE_SHARE_INSTALL}/data")
+  install(FILES "${CMAKE_SOURCE_DIR}/data/models.manifest"
           DESTINATION "${CHERRYTREE_SHARE_INSTALL}/data")
   # share/cherrytree icons
   install(FILES

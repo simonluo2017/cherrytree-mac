@@ -82,6 +82,7 @@ set(CT_SHARED_FILES
   ct_search_panel.cc
   ct_main_win_search.cc
   ct_ai_service.cc
+  ct_ai_models.cc
   ct_ai_panel.cc
   ct_actions_ai.cc
   ct_pref_dlg_ai.cc
