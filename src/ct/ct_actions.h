@@ -287,6 +287,8 @@ public:
     // view actions
     void toggle_show_hide_tree();
     void toggle_show_hide_vte();
+    void toggle_search_panel();
+    void search_index_rebuild();
     void toggle_show_hide_menubar();
     void toggle_show_hide_toolbars();
     void toggle_show_hide_statusbar();

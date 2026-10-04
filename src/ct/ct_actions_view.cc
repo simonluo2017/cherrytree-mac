@@ -42,6 +42,17 @@ void CtActions::toggle_show_hide_vte()
     }
 }
 
+void CtActions::toggle_search_panel()
+{
+    _pCtMainWin->search_panel_show(not _pCtMainWin->search_panel_visible());
+}
+
+void CtActions::search_index_rebuild()
+{
+    _pCtMainWin->search_index_rebuild();
+    _pCtMainWin->search_panel_show(true);
+}
+
 void CtActions::toggle_show_hide_tree()
 {
     _pCtConfig->treeVisible = not _pCtConfig->treeVisible;

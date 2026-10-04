@@ -395,6 +395,10 @@ void CtMenu::init_actions(CtActions* pActions)
             _("Find in Nodes Names and Tags"), sigc::mem_fun(*pActions, &CtActions::find_a_node)});
         _actions.push_back(CtMenuAction{find_cat, "find_in_node", "ct_find_sel", _("_Find in Node Content..."), KB_CONTROL+"f",
             _("Find into the Selected Node Content"), sigc::mem_fun(*pActions, &CtActions::find_in_selected_node)});
+        _actions.push_back(CtMenuAction{find_cat, "toggle_search_panel", "ct_find_all", _("Search Note_book Panel"), KB_CONTROL+KB_ALT+"f",
+            _("Show/Hide the Full Text Search Panel (indexed search of the whole document)"), sigc::mem_fun(*pActions, &CtActions::toggle_search_panel)});
+        _actions.push_back(CtMenuAction{find_cat, "search_index_rebuild", "ct_find_all", _("Rebuild Search Inde_x"), None,
+            _("Delete and Rebuild the Full Text Search Index of the Document"), sigc::mem_fun(*pActions, &CtActions::search_index_rebuild)});
         _actions.push_back(CtMenuAction{find_cat, "find_in_allnodes", "ct_find_all", _("Find _in Multiple Nodes..."), KB_CONTROL+KB_SHIFT+"f",
             _("Find in Multiple Nodes"), sigc::mem_fun(*pActions, &CtActions::find_in_multiple_nodes_act)});
         _actions.push_back(CtMenuAction{find_cat, "find_iter_fw", "ct_find_again", _("Find _Again"), "F3",

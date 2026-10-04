@@ -133,6 +133,7 @@ void CtMainWin::update_window_save_needed(const CtSaveNeededUpdType update_type,
             break;
         case CtSaveNeededUpdType::nbuf: {
             treeIter.pending_edit_db_node_buff();
+            search_index_enqueue_node(treeIter.get_node_id());
             g_autoptr(GDateTime) pGDateTime = g_date_time_new_now_local();
             const gint64 curr_time = g_date_time_to_unix(pGDateTime);
             treeIter.set_node_modification_time(curr_time);
@@ -146,12 +147,16 @@ void CtMainWin::update_window_save_needed(const CtSaveNeededUpdType update_type,
         } break;
         case CtSaveNeededUpdType::npro: {
             treeIter.pending_edit_db_node_prop();
+            search_index_enqueue_node(treeIter.get_node_id());
+            // a rename changes the path stored for the subnodes
+            for (const gint64 child_id : treeIter.get_children_node_ids()) search_index_enqueue_node(child_id);
         } break;
         case CtSaveNeededUpdType::ndel: {
             const gint64 top_node_id = treeIter.get_node_id();
             std::vector<gint64> rm_node_ids = treeIter.get_children_node_ids();
             rm_node_ids.push_back(top_node_id);
             _uCtTreestore->pending_rm_db_nodes(rm_node_ids);
+            search_index_remove_nodes(rm_node_ids);
             for (auto node_id : rm_node_ids) {
                 _ctStateMachine.delete_states(node_id);
             }
@@ -248,6 +253,7 @@ bool CtMainWin::file_open(const fs::path& filepath,
     }
 
     _uCtStorage.reset(new_storage);
+    search_index_open_for_document();
 
     window_title_update(false/*saveNeeded*/);
     menu_set_bookmark_menu_items();

@@ -30,6 +30,7 @@
 
 #include <glibmm/i18n.h>
 #include <memory>
+#include <set>
 #include <gtkmm.h>
 #include <sigc++/sigc++.h>
 #include <sigc++/signal.h>
@@ -93,6 +94,9 @@ class CtTmp;
 class CtMenu;
 class CtPrint;
 class CtStorageControl;
+
+#include "ct_search_index.h"
+class CtSearchPanel;
 
 class CtMainWin : public Gtk::ApplicationWindow
 {
@@ -162,6 +166,17 @@ public:
     CtConfig*                         get_ct_config()   { return _pCtConfig; }
     CtStorageControl*                 get_ct_storage()  { return _uCtStorage.get(); }
     CtActions*                        get_ct_actions()  { return _uCtActions.get(); }
+
+    // document full text search index (FTS5, see ct_main_win_search.cc)
+    const CtSearchIndex* search_index() const;
+    void search_index_open_for_document();
+    void search_index_close();
+    void search_index_enqueue_all(const bool force);
+    void search_index_enqueue_node(const gint64 node_id);
+    void search_index_remove_nodes(const std::vector<gint64>& node_ids);
+    void search_index_rebuild();
+    void search_panel_show(const bool show);
+    bool search_panel_visible() const;
     CtTmp*                            get_ct_tmp()      { return _pCtTmp; }
     Gtk::IconTheme*                   get_icon_theme()  { return _pGtkIconTheme; }
     CtStateMachine&                   get_state_machine() { return _ctStateMachine; }
@@ -390,6 +405,15 @@ private:
 
     Gtk::Box                     _vboxMain{Gtk::ORIENTATION_VERTICAL};
     Gtk::Box                     _vboxText{Gtk::ORIENTATION_VERTICAL};
+    Gtk::Box                     _hBoxTextSearch{Gtk::ORIENTATION_HORIZONTAL};
+    CtSearchPanel*               _pSearchPanel{nullptr};
+    std::unique_ptr<CtSearchIndex> _uSearchIndex;
+    std::set<gint64>             _searchIndexQueue;
+    size_t                       _searchIndexQueueTotal{0};
+    sigc::connection             _searchIndexIdle;
+    sigc::connection             _searchIndexDebounce;
+    void _search_index_start_idle();
+    bool _search_index_idle_tick();
     Gtk::Box                     _hBoxVte{Gtk::ORIENTATION_HORIZONTAL};
     Gtk::Paned                   _hPaned{Gtk::ORIENTATION_HORIZONTAL};
     Gtk::Paned                   _vPaned{Gtk::ORIENTATION_VERTICAL};

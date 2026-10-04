@@ -78,6 +78,9 @@ set(CT_SHARED_FILES
   ct_parser_text.cc
   ct_parser_md.cc
   ct_parser_remarkup.cc
+  ct_search_index.cc
+  ct_search_panel.cc
+  ct_main_win_search.cc
   ct_parser_html.cc
   ct_parser.cc
   ct_filesystem.cc

@@ -339,6 +339,9 @@ const char* CtMenu::_get_ui_str_menu()
   </menu>
 
   <menu action='SearchMenu'>
+    <menuitem action='toggle_search_panel'/>
+    <menuitem action='search_index_rebuild'/>
+    <separator/>
     <menuitem action='select_node'/>
     <menuitem action='find_in_node_names'/>
     <menuitem action='find_in_node'/>

@@ -191,7 +191,8 @@ CtMainWin::CtMainWin(bool                            no_gui,
 #else
     _scrolledwindowText.add(_ctTextview.mm());
     _vboxText.pack_start(_init_window_header(), false, false);
-    _vboxText.pack_start(_scrolledwindowText);
+    _hBoxTextSearch.pack_start(_scrolledwindowText, true, true);
+    _vboxText.pack_start(_hBoxTextSearch);
     if (_pCtConfig->treeRightSide) {
         _hPaned.pack1(_vboxText, Gtk::EXPAND);
         _hPaned.pack2(_scrolledwindowTree, Gtk::FILL);
@@ -1933,6 +1934,7 @@ void CtMainWin::reset()
     user_active() = false;
 
     _ctStateMachine.reset();
+    search_index_close();
 
     _uCtStorage.reset(CtStorageControl::create_dummy_storage(this));
 

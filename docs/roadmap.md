@@ -17,7 +17,7 @@
 | §3.1 代码签名 / 公证 / 自动更新 | ⬜ 未开始 | 需要 Apple Developer 账号 |
 | §5.1 Markdown 节点渲染预览（含 Remarkup） | ✅ 完成 | Preview / Raw 切换，对象引用跳转本地节点 |
 | 编辑器 TextMate 外观、列选 | ✅ 完成 | 用户可感知的编辑体验 |
-| §19 FTS5 全文检索 | ⬜ 未开始 | 建议作为 Local Knowledge Engine 第一步 |
+| §19 FTS5 全文检索 | ✅ 完成 | `<文档>.ai-index.sqlite` 旁路索引、增量更新、检索面板（Ctrl+Alt+F），见 `docs/macos-native-ui.md` |
 | §31 AIProvider 抽象 + llama.cpp/GGUF 后端 | ⬜ 未开始 | 纯 C++，优先于 Apple / MLX |
 | §32 Model Manager（应用内一键下载，SHA256 校验） | ⬜ 未开始 | 目录来自签名 manifest，只收录可信官方来源 |
 | §4 Split View | ⬜ 未开始 | 伴随 Document / View 拆分 |

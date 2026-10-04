@@ -113,6 +113,8 @@ public:
     static bool is_textmate_scheme(const std::string& scheme) { return "textmate-light" == scheme or "textmate-dark" == scheme; }
     bool                                        showNodeNameHeader{true};
     int                                         nodesOnNodeNameHeader{3};
+    // keep a full text search index (<doc>.ai-index.sqlite) of the open document
+    bool                                        searchIndexEnabled{true};
     int                                         maxMatchesInPage{500};
     int                                         toolbarIconSize{1};
     int                                         multipleWordsSearchType{0}; // 0: exact match, 1: disregard order (AND), 2: match any (OR)
