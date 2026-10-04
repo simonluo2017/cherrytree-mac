@@ -239,6 +239,13 @@ void CtApp::_on_startup()
     for (auto pPath = pLMSearchPath; *pPath; ++pPath) {
         langSearchPath.push_back(*pPath);
     }
+    // self contained bundle: the gtksourceview data shipped inside it, explicitly, in case the
+    // default search path was computed before XDG_DATA_DIRS pointed into the bundle
+    const fs::path bundleShareDir = fs::get_app_bundle_share_dir();
+    const fs::path bundleLanguageSpecs = bundleShareDir / "gtksourceview-4" / "language-specs";
+    if (not bundleShareDir.empty() and fs::is_directory(bundleLanguageSpecs)) {
+        langSearchPath.push_back(bundleLanguageSpecs.c_str());
+    }
     fs::path ctLanguageSpecsData = fs::get_cherrytree_datadir() / CtConfig::ConfigLanguageSpecsDirname;
     langSearchPath.push_back(ctLanguageSpecsData.c_str());
     fs::path ctLanguageSpecsConfig = fs::get_cherrytree_config_language_specs_dirpath();
@@ -250,6 +257,10 @@ void CtApp::_on_startup()
     gtk_source_language_manager_set_search_path(_pGtkSourceLanguageManager, (gchar **)langSearchPath.data());
 
     GtkSourceStyleSchemeManager* pGtkSourceStyleSchemeManager = gtk_source_style_scheme_manager_get_default();
+    const fs::path bundleStyles = bundleShareDir / "gtksourceview-4" / "styles";
+    if (not bundleShareDir.empty() and fs::is_directory(bundleStyles)) {
+        gtk_source_style_scheme_manager_append_search_path(pGtkSourceStyleSchemeManager, bundleStyles.c_str());
+    }
     fs::path ctStylesData = fs::get_cherrytree_datadir() / CtConfig::ConfigStylesDirname;
     gtk_source_style_scheme_manager_append_search_path(pGtkSourceStyleSchemeManager, ctStylesData.c_str());
     fs::path ctStylesConfig = fs::get_cherrytree_config_styles_dirpath();

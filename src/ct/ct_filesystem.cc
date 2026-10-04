@@ -535,6 +535,14 @@ std::uintmax_t remove_all(const path& dir)
     return count;
 }
 
+path get_app_bundle_share_dir()
+{
+    if (_AppImageUsrDir.empty() or not is_directory(_AppImageUsrDir / "share" / "cherrytree")) {
+        return path{};
+    }
+    return _AppImageUsrDir / "share";
+}
+
 bool app_bundle_setup_env()
 {
     if (_AppImageUsrDir.empty() or not is_directory(_AppImageUsrDir / "share" / "cherrytree")) {
