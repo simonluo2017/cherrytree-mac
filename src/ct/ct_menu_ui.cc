@@ -279,6 +279,16 @@ const char* CtMenu::_get_ui_str_menu()
   </menu>
 
   <menu action='ToolsMenu'>
+    <menu action='AiSubMenu'>
+      <menuitem action='ai_ask_node'/>
+      <menuitem action='ai_summarize'/>
+      <menuitem action='ai_explain'/>
+      <menuitem action='ai_extract_tasks'/>
+      <menuitem action='ai_generate_tags'/>
+      <separator/>
+      <menuitem action='ai_toggle_panel'/>
+    </menu>
+    <separator/>
     <menuitem action='spellcheck_toggle'/>
     <separator/>
     <menuitem action='exec_code_los'/>

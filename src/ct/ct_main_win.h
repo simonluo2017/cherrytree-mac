@@ -96,7 +96,9 @@ class CtPrint;
 class CtStorageControl;
 
 #include "ct_search_index.h"
+#include "ct_ai_service.h"
 class CtSearchPanel;
+class CtAiPanel;
 
 class CtMainWin : public Gtk::ApplicationWindow
 {
@@ -177,6 +179,13 @@ public:
     void search_index_rebuild();
     void search_panel_show(const bool show);
     bool search_panel_visible() const;
+
+    // local AI (ct_main_win_search.cc)
+    CtAiService* ai_service() { if (not _uAiService) _uAiService = std::make_unique<CtAiService>(_pCtConfig); return _uAiService.get(); }
+    const CtAiService* ai_service() const { return _uAiService.get(); }
+    CtAiPanel* ai_panel() { return _pAiPanel; }
+    void ai_panel_show(const bool show);
+    bool ai_panel_visible() const;
     CtTmp*                            get_ct_tmp()      { return _pCtTmp; }
     Gtk::IconTheme*                   get_icon_theme()  { return _pGtkIconTheme; }
     CtStateMachine&                   get_state_machine() { return _ctStateMachine; }
@@ -407,6 +416,8 @@ private:
     Gtk::Box                     _vboxText{Gtk::ORIENTATION_VERTICAL};
     Gtk::Box                     _hBoxTextSearch{Gtk::ORIENTATION_HORIZONTAL};
     CtSearchPanel*               _pSearchPanel{nullptr};
+    CtAiPanel*                   _pAiPanel{nullptr};
+    std::unique_ptr<CtAiService> _uAiService;
     std::unique_ptr<CtSearchIndex> _uSearchIndex;
     std::set<gint64>             _searchIndexQueue;
     size_t                       _searchIndexQueueTotal{0};

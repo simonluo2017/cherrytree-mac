@@ -88,6 +88,7 @@ CtPrefDlg::CtPrefDlg(CtMainWin* parent)
     pNotebook->append_page(*build_tab_toolbar(),            _("Toolbar"));
     pNotebook->append_page(*build_tab_kb_shortcuts(),       _("Keyboard Shortcuts"));
     pNotebook->append_page(*build_tab_misc(),               _("Miscellaneous"));
+    pNotebook->append_page(*build_tab_ai(),                 _("AI (Local Model)"));
 
 #if GTKMM_MAJOR_VERSION >= 4
     get_content_area()->append(*pNotebook);

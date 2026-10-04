@@ -115,6 +115,13 @@ public:
     int                                         nodesOnNodeNameHeader{3};
     // keep a full text search index (<doc>.ai-index.sqlite) of the open document
     bool                                        searchIndexEnabled{true};
+    // local AI (llama.cpp): GGUF model file and generation settings
+    std::string                                 aiModelPath;
+    int                                         aiContextSize{4096};
+    int                                         aiThreads{0};
+    int                                         aiMaxTokens{1024};
+    double                                      aiTemperature{0.4};
+    int                                         aiUnloadMinutes{10};
     int                                         maxMatchesInPage{500};
     int                                         toolbarIconSize{1};
     int                                         multipleWordsSearchType{0}; // 0: exact match, 1: disregard order (AND), 2: match any (OR)

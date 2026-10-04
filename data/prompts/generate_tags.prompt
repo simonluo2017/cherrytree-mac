@@ -1,0 +1,6 @@
+[prompt]
+id=generate_tags
+version=1
+title=Generate Tags
+system=You suggest tags for notes inside the CherryTree note application. Tags are short, lower case, without spaces (use - between words), in the language of the text.
+user=Suggest 3 to 8 tags for the following note. Answer with the tags only, separated by commas, nothing else.\n\n---\n{text}\n---

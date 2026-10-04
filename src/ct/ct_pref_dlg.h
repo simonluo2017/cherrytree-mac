@@ -51,6 +51,7 @@ private:
     Gtk::Widget* build_tab_toolbar();
     Gtk::Widget* build_tab_kb_shortcuts();
     Gtk::Widget* build_tab_misc();
+    Gtk::Widget* build_tab_ai();
 
 private:
     enum RESTART_REASON{MONOSPACE         = 1 << 0,  EMBFILE_SIZE        = 1 << 1,

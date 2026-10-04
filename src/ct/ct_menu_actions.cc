@@ -55,6 +55,7 @@ void CtMenu::init_actions(CtActions* pActions)
     _actions.push_back(CtMenuAction{"", "TreeSortSubMenu", "ct_sort-asc", _("Nod_es Sort"), None, None, [](){}});
     _actions.push_back(CtMenuAction{"", "BookmarksSubMenu", "ct_pin", _("B_ookmarks"), None, None, [](){}});
     _actions.push_back(CtMenuAction{"", "ImportSubMenu", CtConst::STR_STOCK_CT_IMP, _("_Import"), None, None, [](){}});
+    _actions.push_back(CtMenuAction{"", "AiSubMenu", "ct_execute", _("_AI (Local Model)"), None, None, [](){}});
     _actions.push_back(CtMenuAction{"", "ExportSubMenu", "ct_export_from_cherrytree", _("_Export"), None, None, [](){}});
     _actions.push_back(CtMenuAction{"", "PrefSubMenu", "ct_preferences", _("_Preferences"), None, None, [](){}});
     _actions.push_back(CtMenuAction{"", "RecentDocsSubMenu", "ct_open", _("_Recent Documents"), None,
@@ -302,6 +303,18 @@ void CtMenu::init_actions(CtActions* pActions)
     }
     {
         const char* tools_cat = _("Tools");
+        _actions.push_back(CtMenuAction{tools_cat, "ai_summarize", "ct_execute", _("AI: _Summarize"), None,
+            _("Summarize the Selection or the Current Node with the Local AI Model"), sigc::mem_fun(*pActions, &CtActions::ai_summarize)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_explain", "ct_execute", _("AI: _Explain"), None,
+            _("Explain the Selection or the Current Node with the Local AI Model"), sigc::mem_fun(*pActions, &CtActions::ai_explain)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_extract_tasks", "ct_execute", _("AI: Extract _Tasks"), None,
+            _("List the Tasks Found in the Selection or the Current Node"), sigc::mem_fun(*pActions, &CtActions::ai_extract_tasks)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_generate_tags", "ct_execute", _("AI: Suggest Ta_gs"), None,
+            _("Suggest Tags for the Current Node"), sigc::mem_fun(*pActions, &CtActions::ai_generate_tags)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_ask_node", "ct_execute", _("AI: _Ask This Node..."), KB_CONTROL+KB_ALT+"a",
+            _("Ask a Question About the Current Node to the Local AI Model"), sigc::mem_fun(*pActions, &CtActions::ai_ask_node)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_toggle_panel", "ct_execute", _("AI: Show/Hide _Panel"), None,
+            _("Show/Hide the AI Panel"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_panel)});
         _actions.push_back(CtMenuAction{tools_cat, "spellcheck_toggle", "ct_spell-check", _("Enable/Disable _Spell Check"), KB_SHIFT+KB_ALT+"s",
             _("Toggle Enable/Disable Spell Check"), sigc::mem_fun(*pActions, &CtActions::toggle_ena_dis_spellcheck)});
 #if GTK_SOURCE_MAJOR_VERSION > 5 || (GTK_SOURCE_MAJOR_VERSION == 5 && GTK_SOURCE_MINOR_VERSION >= 4)

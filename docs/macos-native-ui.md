@@ -78,6 +78,27 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 - 关闭：配置项 `search_index_enabled=false`（config.cfg，暂无界面开关）。
 - 未保存过的新文档没有索引文件，面板会提示先保存。
 
+## 本地 AI（llama.cpp，第一阶段）
+
+完全在本机运行，没有任何网络请求。推理后端是 vendor 进仓库的 llama.cpp（`third_party/llama.cpp`，锁定 commit，见其中的 `VENDOR.md`），macOS 上用 Metal，模型格式 GGUF。
+
+**配置**：Preferences → AI (Local Model)：选择 `.gguf` 文件、上下文长度、回答长度上限、temperature、线程数、空闲多少分钟自动卸载模型。模型文件现阶段由你自己下载放到本机（下一步做应用内一键下载）。
+
+**功能**（Tools → AI (Local Model)）：
+
+| 菜单 | 作用 |
+| --- | --- |
+| Ask This Node…（Ctrl+Alt+A / ⌘⌥A） | 打开 AI 面板，就当前节点提问 |
+| Summarize / Explain / Extract Tasks / Suggest Tags | 作用于选中文本；没有选中时作用于整个当前节点 |
+| Show/Hide Panel | 开关右侧 AI 面板 |
+
+- 输出流式显示在右侧 AI 面板（与检索面板共用位置），可随时 Stop。
+- 面板底部三个按钮：Copy、Insert into Node（追加到当前节点末尾）、New Subnode（以回答建子节点）。AI 不会自动修改任何笔记。
+- 模型只看到选中文本或当前节点的纯文本，加上提示词；不会上传整个文档。
+- 提示词在 `data/prompts/*.prompt`（KeyFile 格式，带 id/version），在 `~/.config/cherrytree/prompts/` 放同名文件即可覆盖。
+- 架构：`CtAiProvider` 接口 → `CtAiProviderLlama`（llama.cpp）；`CtAiService` 负责后台线程、流式回调、取消、空闲卸载。Apple Foundation Models / MLX / 云端以后作为新的 Provider 接入，业务层不改。
+- 构建开关：CMake `-DUSE_LLAMA_CPP=OFF` 可去掉整个 AI 模块。
+
 ## 编辑器外观：CherryTree / TextMate
 
 Preferences → Interface → Appearance → **Editor Look** 单选：

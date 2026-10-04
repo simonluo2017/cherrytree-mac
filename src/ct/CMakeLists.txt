@@ -81,6 +81,10 @@ set(CT_SHARED_FILES
   ct_search_index.cc
   ct_search_panel.cc
   ct_main_win_search.cc
+  ct_ai_service.cc
+  ct_ai_panel.cc
+  ct_actions_ai.cc
+  ct_pref_dlg_ai.cc
   ct_parser_html.cc
   ct_parser.cc
   ct_filesystem.cc
@@ -88,6 +92,10 @@ set(CT_SHARED_FILES
 )
 
 add_library(cherrytree_shared STATIC ${CT_SHARED_FILES})
+if(USE_LLAMA_CPP)
+  target_sources(cherrytree_shared PRIVATE ct_ai_provider_llama.cc)
+  target_link_libraries(cherrytree_shared llama)
+endif()
 target_link_libraries(cherrytree_shared
   ${GTKMM_LIBRARIES}
   ${GTKSV_LIBRARIES}

@@ -29,6 +29,7 @@
 #include "ct_image.h"
 #include "ct_table.h"
 #include "ct_types.h"
+#include <map>
 #include "ct_filesystem.h"
 #include <optional>
 
@@ -92,6 +93,10 @@ public: // todo: fix naming
     bool          _is_there_selected_node_or_error();
     bool          _is_tree_not_empty_or_error();
     bool          _is_curr_node_not_read_only_or_error();
+    Glib::ustring _ai_source_text(bool& is_selection);
+    bool          _ai_ready_or_error();
+    void          _ai_run_prompt(const std::string& prompt_id, const std::map<std::string, std::string>& vars, const Glib::ustring& title);
+    void          _ai_text_action(const std::string& prompt_id, const Glib::ustring& title);
     bool          _is_curr_node_not_syntax_highlighting_or_error(bool plain_text_ok = false);
     bool          _is_there_text_selection_or_error();
     bool          _is_there_anch_widg_selection_or_error(const char anch_widg_id);
@@ -289,6 +294,16 @@ public:
     void toggle_show_hide_vte();
     void toggle_search_panel();
     void search_index_rebuild();
+    // local AI (ct_actions_ai.cc)
+    void ai_summarize();
+    void ai_explain();
+    void ai_extract_tasks();
+    void ai_generate_tags();
+    void ai_ask_node();
+    void ai_ask_node_question(const Glib::ustring& question);
+    void ai_toggle_panel();
+    void ai_insert_text_in_node(const Glib::ustring& text);
+    void ai_new_subnode_with_text(const Glib::ustring& name, const Glib::ustring& text);
     void toggle_show_hide_menubar();
     void toggle_show_hide_toolbars();
     void toggle_show_hide_statusbar();

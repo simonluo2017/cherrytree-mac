@@ -217,6 +217,29 @@ endif()
 
 add_subdirectory(src/7za)
 
+# -- local AI: llama.cpp (vendored snapshot, see third_party/llama.cpp/VENDOR.md)
+option(USE_LLAMA_CPP "Build the local AI provider on llama.cpp" ON)
+if(USE_LLAMA_CPP)
+  set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_COMMON OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+  set(LLAMA_BUILD_APP OFF CACHE BOOL "" FORCE)
+  set(LLAMA_ALL_WARNINGS OFF CACHE BOOL "" FORCE)
+  set(GGML_NATIVE OFF CACHE BOOL "" FORCE)      # portable binaries (the .app runs on any Apple Silicon)
+  set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
+  if(APPLE)
+    set(GGML_METAL ON CACHE BOOL "" FORCE)
+    set(GGML_METAL_EMBED_LIBRARY ON CACHE BOOL "" FORCE)  # no .metallib file to ship
+    set(GGML_BLAS ON CACHE BOOL "" FORCE)
+    set(GGML_BLAS_VENDOR "Apple" CACHE STRING "" FORCE)
+  endif()
+  add_subdirectory(third_party/llama.cpp EXCLUDE_FROM_ALL)
+  add_compile_definitions(HAVE_LLAMA_CPP)
+endif()
+
 include(FindPackageHandleStandardArgs)
 
 # For both src and tests targets
@@ -350,6 +373,9 @@ if(${CMAKE_SYSTEM_NAME} MATCHES Linux|.*BSD|DragonFly|Darwin)
           "${CMAKE_SOURCE_DIR}/data/script3.js"
           "${CMAKE_SOURCE_DIR}/data/styles4.css"
           "${CMAKE_SOURCE_DIR}/data/user-style.xml"
+          DESTINATION "${CHERRYTREE_SHARE_INSTALL}/data")
+  # share/cherrytree data/prompts (local AI prompt templates)
+  install(DIRECTORY ${CMAKE_SOURCE_DIR}/data/prompts
           DESTINATION "${CHERRYTREE_SHARE_INSTALL}/data")
   # share/cherrytree icons
   install(FILES

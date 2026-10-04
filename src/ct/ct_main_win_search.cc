@@ -22,6 +22,7 @@
 #include "ct_main_win.h"
 #include "ct_search_index.h"
 #include "ct_search_panel.h"
+#include "ct_ai_panel.h"
 #include "ct_export2txt.h"
 #include "ct_storage_control.h"
 #include "ct_misc_utils.h"
@@ -197,6 +198,7 @@ void CtMainWin::search_panel_show(const bool show)
     }
     _pSearchPanel->set_visible(show);
     if (show) {
+        if (_pAiPanel) _pAiPanel->set_visible(false); // the two panels share the side area
         _pSearchPanel->refresh();
         _pSearchPanel->focus_entry();
     }
@@ -211,4 +213,31 @@ void CtMainWin::search_panel_show(const bool show)
 bool CtMainWin::search_panel_visible() const
 {
     return _pSearchPanel and _pSearchPanel->get_visible();
+}
+
+void CtMainWin::ai_panel_show(const bool show)
+{
+#if GTKMM_MAJOR_VERSION < 4
+    if (not _uAiService) {
+        _uAiService = std::make_unique<CtAiService>(_pCtConfig);
+    }
+    if (not _pAiPanel) {
+        _pAiPanel = Gtk::manage(new CtAiPanel{this});
+        _hBoxTextSearch.pack_start(*_pAiPanel, false, false);
+    }
+    _pAiPanel->set_visible(show);
+    if (show) {
+        if (_pSearchPanel) _pSearchPanel->set_visible(false);
+    }
+    else {
+        _ctTextview.mm().grab_focus();
+    }
+#else
+    (void)show;
+#endif
+}
+
+bool CtMainWin::ai_panel_visible() const
+{
+    return _pAiPanel and _pAiPanel->get_visible();
 }
