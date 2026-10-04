@@ -103,6 +103,7 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 - Use This Model 把它设为当前模型；Delete 删除文件；关闭对话框不会中断下载。
 - 固定哈希：在能访问 huggingface.co 的机器上运行 `python3 scripts/update_model_manifest.py`，它把每个文件的大小和 LFS SHA256 写回 manifest，提交后 app 就只信任仓库里的哈希。
 - manifest 条目可加 `url=` 指定镜像地址（例如国内镜像），默认用 Hugging Face 的 resolve 地址。
+- 分片的 GGUF（如 Qwen2.5 7B 官方仓库的 `-00001-of-00002`）用 `files_extra` / `size_bytes_extra` / `sha256_extra` 列出其余分片；每片单独下载、校验，加载时指向第一片即可。
 - 用户自己放入的模型文件走 "Model File (GGUF)" 一栏，不经过校验，视为 Custom / Unverified。
 
 **功能**（Tools → AI (Local Model)）：

@@ -186,7 +186,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
             Gtk::TreeModel::Row row = *rStore->append();
             row[pColumns->name] = e.name;
             row[pColumns->tier] = e.tier == recommended ? e.tier + " ★" : e.tier;
-            row[pColumns->size] = f_size_str(e.size_bytes);
+            row[pColumns->size] = f_size_str(e.total_size());
             row[pColumns->status] = f_status_str(e);
             row[pColumns->id] = e.id;
             if (e.id == selected_id) pTreeView->get_selection()->select(row);
@@ -218,7 +218,9 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
         Glib::ustring markup = str::xml_escape(pEntry->description) + "\n";
         markup += Glib::ustring{_("Source")} + ": <a href='" + str::xml_escape(pEntry->repo_url()) + "'>" + str::xml_escape(pEntry->repo) + "</a> · ";
         markup += Glib::ustring{_("License")} + ": <a href='" + str::xml_escape(pEntry->license_url) + "'>" + str::xml_escape(pEntry->license) + "</a> · ";
-        markup += f_size_str(pEntry->size_bytes) + memory_note + "\n";
+        Glib::ustring parts_note;
+        if (not pEntry->extra_files.empty()) parts_note = str::format(_(" (%s files)"), std::to_string(pEntry->all_files().size()));
+        markup += f_size_str(pEntry->total_size()) + parts_note + memory_note + "\n";
         markup += Glib::ustring{_("SHA256")} + ": " + hash_note;
         label_detail->set_markup(markup);
     };
@@ -260,7 +262,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
         question += Glib::ustring{_("Publisher")} + ": " + str::xml_escape(pEntry->publisher) + "\n";
         question += Glib::ustring{_("Download from")} + ": " + str::xml_escape(pEntry->download_url()) + "\n";
         question += Glib::ustring{_("License")} + ": " + str::xml_escape(pEntry->license) + "\n";
-        question += Glib::ustring{_("Size")} + ": " + f_size_str(pEntry->size_bytes) + "\n";
+        question += Glib::ustring{_("Size")} + ": " + f_size_str(pEntry->total_size()) + "\n";
         question += Glib::ustring{_("Verification")} + ": " + (pEntry->hash_pinned() ? _("SHA256 pinned in the catalog") : _("SHA256 from the publisher's Hugging Face LFS metadata")) + "\n\n";
         question += _("Download this file now? The model is only used after the SHA256 matches.");
         if (not CtDialogs::question_dialog(question, *this)) return;

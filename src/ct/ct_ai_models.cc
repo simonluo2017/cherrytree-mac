@@ -144,6 +144,24 @@ bool CtModelManager::load_manifest(const fs::path& manifest)
             e.pooling = get("pooling");
             e.query_prefix = get("query_prefix");
             if (keyFile.has_key(group, "embedding_dim")) e.embedding_dim = keyFile.get_integer(group, "embedding_dim");
+            // split models: files_extra / sha256_extra / size_bytes_extra are ';' separated lists
+            auto split_list = [](const std::string& s){
+                std::vector<std::string> v;
+                std::string cur;
+                for (const char ch : s) { if (ch == ';') { v.push_back(cur); cur.clear(); } else cur += ch; }
+                if (not cur.empty() or not v.empty()) v.push_back(cur);
+                for (std::string& item : v) { while (not item.empty() and item.front() == ' ') item.erase(0, 1); while (not item.empty() and item.back() == ' ') item.pop_back(); }
+                while (not v.empty() and v.back().empty()) v.pop_back();
+                return v;
+            };
+            e.extra_files = split_list(get("files_extra"));
+            e.extra_sha256 = split_list(get("sha256_extra"));
+            for (const std::string& sz : split_list(get("size_bytes_extra"))) e.extra_sizes.push_back(static_cast<uint64_t>(std::strtoull(sz.c_str(), nullptr, 10)));
+            e.extra_sha256.resize(e.extra_files.size());
+            e.extra_sizes.resize(e.extra_files.size(), 0);
+            bool bad_extra{false};
+            for (const std::string& f : e.extra_files) if (f.find('/') != std::string::npos or f.find("..") != std::string::npos) bad_extra = true;
+            if (bad_extra) { spdlog::warn("models: skipping entry {} with a malformed extra file", e.id); continue; }
             // only files named like a model from a two level HF repo are accepted
             if (e.repo.empty() or e.file.empty() or e.repo.find('/') == std::string::npos or
                 e.file.find('/') != std::string::npos or e.file.find("..") != std::string::npos) {
@@ -179,15 +197,27 @@ fs::path CtModelManager::partial_path(const CtModelEntry& entry) const
 CtModelState CtModelManager::state(const CtModelEntry& entry) const
 {
     if (_downloading and _downloadingId == entry.id) return CtModelState::Downloading;
-    if (fs::is_regular_file(model_path(entry))) return CtModelState::Installed;
-    if (fs::is_regular_file(partial_path(entry))) return CtModelState::Partial;
+    bool all_present{true};
+    bool any_present{false};
+    for (const std::string& f : entry.all_files()) {
+        const bool present = fs::is_regular_file(models_dir() / f);
+        all_present = all_present and present;
+        any_present = any_present or present or fs::is_regular_file(models_dir() / (f + ".part"));
+    }
+    if (all_present) return CtModelState::Installed;
+    if (any_present) return CtModelState::Partial;
     return CtModelState::NotInstalled;
 }
 
 uint64_t CtModelManager::partial_bytes(const CtModelEntry& entry) const
 {
-    const fs::path p = partial_path(entry);
-    return fs::is_regular_file(p) ? static_cast<uint64_t>(fs::file_size(p)) : 0;
+    uint64_t total{0};
+    for (const std::string& f : entry.all_files()) {
+        for (const fs::path& p : {models_dir() / f, models_dir() / (f + ".part")}) {
+            if (fs::is_regular_file(p)) total += static_cast<uint64_t>(fs::file_size(p));
+        }
+    }
+    return total;
 }
 
 void CtModelManager::_apply_proxy(void* pCurl) const
@@ -204,7 +234,7 @@ void CtModelManager::_apply_proxy(void* pCurl) const
     }
 }
 
-std::string CtModelManager::fetch_publisher_sha256(const CtModelEntry& entry, std::string& error) const
+std::string CtModelManager::fetch_publisher_sha256(const CtModelEntry& entry, const std::string& file, std::string& error) const
 {
     const std::string url = "https://huggingface.co/api/models/" + entry.repo + "/tree/main";
     std::string body;
@@ -229,7 +259,7 @@ std::string CtModelManager::fetch_publisher_sha256(const CtModelEntry& entry, st
         return {};
     }
     // minimal JSON scan: the object with "path":"<file>" carries "lfs":{"oid":"<sha256>",...}
-    const std::string needle = "\"path\":\"" + entry.file + "\"";
+    const std::string needle = "\"path\":\"" + file + "\"";
     const auto pos = body.find(needle);
     if (pos == std::string::npos) { error = "The file is not listed in the repository"; return {}; }
     const auto lfs = body.find("\"lfs\"", pos);
@@ -355,42 +385,48 @@ bool CtModelManager::start_download(const CtModelEntry& entry, std::string& erro
     {
         std::lock_guard<std::mutex> lock{_mutex};
         _pendingDone = false;
-        _pendingProgress = CtModelProgress{"starting", 0, entry.size_bytes, 0.0};
+        _pendingProgress = CtModelProgress{"starting", 0, entry.total_size(), 0.0};
     }
     const CtModelEntry e = entry;
     _worker = std::thread([this, e](){
         std::string err;
-        bool ok{false};
+        bool ok{true};
         std::string message;
-        const fs::path part = partial_path(e);
-        const fs::path final_path = model_path(e);
-        do {
+        const std::vector<std::string> files = e.all_files();
+        for (size_t i = 0; i < files.size() and ok; ++i) {
+            const std::string& file = files[i];
+            const std::string pinned = i == 0 ? e.sha256 : e.extra_sha256[i - 1];
+            const uint64_t size = i == 0 ? e.size_bytes : e.extra_sizes[i - 1];
+            const fs::path part = models_dir() / (file + ".part");
+            const fs::path final_path = models_dir() / file;
+            if (fs::is_regular_file(final_path)) continue; // this part is already installed and verified
             // the expected hash: pinned in the manifest, or the publisher's LFS hash
-            std::string expected = e.sha256;
+            std::string expected = pinned;
             std::string hash_source = "pinned in the catalog";
             if (expected.empty()) {
-                expected = fetch_publisher_sha256(e, err);
+                expected = fetch_publisher_sha256(e, file, err);
                 hash_source = "Hugging Face LFS metadata";
-                if (expected.empty()) { message = "Cannot obtain the file hash to verify the download: " + err; break; }
+                if (expected.empty()) { ok = false; message = "Cannot obtain the hash of " + file + " to verify the download: " + err; break; }
             }
-            if (_cancel) { message = "cancelled"; break; }
-            if (not _download_file(e.download_url(), part, e.size_bytes, err)) { message = err; break; }
-            if (_cancel) { message = "cancelled"; break; }
+            if (_cancel) { ok = false; message = "cancelled"; break; }
+            if (not _download_file(e.download_url_of(file), part, size, err)) { ok = false; message = err; break; }
+            if (_cancel) { ok = false; message = "cancelled"; break; }
             const std::string actual = _sha256_of_file(part, "verifying", err);
-            if (actual.empty()) { message = err; break; }
+            if (actual.empty()) { ok = false; message = err; break; }
             if (actual != expected) {
                 fs::remove(part);
-                message = "SHA256 mismatch (" + hash_source + "): the download was discarded. Expected " + expected + ", got " + actual;
+                ok = false;
+                message = "SHA256 mismatch for " + file + " (" + hash_source + "): the download was discarded. Expected " + expected + ", got " + actual;
                 break;
             }
             std::string moveErr;
-            if (not fs::move_file(part, final_path, &moveErr)) { message = "Cannot move the model into place: " + moveErr; break; }
-            // keep the hash next to the model for later audits
+            if (not fs::move_file(part, final_path, &moveErr)) { ok = false; message = "Cannot move the model into place: " + moveErr; break; }
+            // keep the hash next to the file for later audits
             std::ofstream side{(final_path.string() + ".sha256")};
-            side << actual << "  " << e.file << "\n" << "source: " << e.download_url() << "\n" << "hash: " << hash_source << "\n";
-            ok = true;
+            side << actual << "  " << file << "\n" << "source: " << e.download_url_of(file) << "\n" << "hash: " << hash_source << "\n";
             message = "Verified SHA256 " + actual.substr(0, 12) + "… (" + hash_source + ")";
-        } while (false);
+        }
+        if (ok and message.empty()) message = "Already installed";
         {
             std::lock_guard<std::mutex> lock{_mutex};
             _pendingDone = true;
@@ -410,8 +446,10 @@ void CtModelManager::cancel_download()
 bool CtModelManager::delete_model(const CtModelEntry& entry, std::string& error)
 {
     if (_downloading and _downloadingId == entry.id) { error = "The model is being downloaded"; return false; }
-    for (const fs::path& p : {model_path(entry), partial_path(entry), fs::path{model_path(entry).string() + ".sha256"}}) {
-        if (fs::is_regular_file(p)) fs::remove(p);
+    for (const std::string& f : entry.all_files()) {
+        for (const fs::path& p : {models_dir() / f, models_dir() / (f + ".part"), models_dir() / (f + ".sha256")}) {
+            if (fs::is_regular_file(p)) fs::remove(p);
+        }
     }
     return true;
 }

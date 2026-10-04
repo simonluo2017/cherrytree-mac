@@ -13,6 +13,7 @@
 # tier: small | medium | large      min_memory_gb: unified memory needed to run comfortably
 # url: optional explicit download URL (e.g. a mirror); by default the Hugging Face "resolve" URL of repo/file
 # kind: generation (default) | embedding     embedding models: pooling (mean|last|cls), query_prefix, embedding_dim
+# split GGUF (file is part 1 of N): files_extra / size_bytes_extra / sha256_extra are ';' separated lists of the other parts
 
 [qwen2.5-1.5b-instruct-q4_k_m]
 name=Qwen2.5 1.5B Instruct (Q4_K_M)
@@ -47,7 +48,10 @@ name=Qwen2.5 7B Instruct (Q4_K_M)
 tier=large
 publisher=Qwen (Alibaba Cloud)
 repo=Qwen/Qwen2.5-7B-Instruct-GGUF
-file=qwen2.5-7b-instruct-q4_k_m.gguf
+file=qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf
+files_extra=qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf
+size_bytes_extra=0
+sha256_extra=
 license=Apache-2.0
 license_url=https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/blob/main/LICENSE
 min_memory_gb=16

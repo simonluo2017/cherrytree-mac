@@ -55,6 +55,14 @@ struct CtModelEntry
     std::string query_prefix;  // embedding models: instruction prepended to search queries
     int         embedding_dim{0};
     bool is_embedding() const { return kind == "embedding"; }
+    // split GGUF models: additional parts (file is the first part, the one to load)
+    std::vector<std::string> extra_files;
+    std::vector<std::string> extra_sha256;   // same order as extra_files, "" = not pinned
+    std::vector<uint64_t>    extra_sizes;    // same order, 0 = unknown
+    /// every file of the model: the first part followed by the extra parts
+    std::vector<std::string> all_files() const { std::vector<std::string> v{file}; v.insert(v.end(), extra_files.begin(), extra_files.end()); return v; }
+    uint64_t total_size() const { uint64_t t = size_bytes; for (const uint64_t s : extra_sizes) t += s; return t; }
+    std::string download_url_of(const std::string& part) const { return url.empty() ? "https://huggingface.co/" + repo + "/resolve/main/" + part : url; }
 
     std::string download_url() const { return url.empty() ? "https://huggingface.co/" + repo + "/resolve/main/" + file : url; }
     std::string repo_url() const { return "https://huggingface.co/" + repo; }
@@ -112,8 +120,8 @@ public:
     void cancel_download();
     bool delete_model(const CtModelEntry& entry, std::string& error);
 
-    /// the publisher's LFS sha256 of the file from the Hugging Face API (blocking network call)
-    std::string fetch_publisher_sha256(const CtModelEntry& entry, std::string& error) const;
+    /// the publisher's LFS sha256 of a file of the model from the Hugging Face API (blocking network call)
+    std::string fetch_publisher_sha256(const CtModelEntry& entry, const std::string& file, std::string& error) const;
 
 private:
     void _on_dispatch();
