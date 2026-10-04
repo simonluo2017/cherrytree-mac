@@ -29,6 +29,7 @@
 #include <unordered_map>
 
 #include "ct_filesystem.h"
+#include <sstream>
 #include "ct_misc_utils.h"
 #include "ct_const.h"
 #include "ct_logging.h"
@@ -549,8 +550,41 @@ bool app_bundle_setup_env()
     };
     f_setenv_default("XDG_DATA_DIRS", res / "share");
     f_setenv_default("GSETTINGS_SCHEMA_DIR", res / "share" / "glib-2.0" / "schemas");
-    f_setenv_default("GDK_PIXBUF_MODULEDIR", res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders");
-    f_setenv_default("GDK_PIXBUF_MODULE_FILE", res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders.cache");
+    // gdk-pixbuf loaders: the module paths of a loaders.cache must be absolute (relative names
+    // are passed as they are to dlopen), but the bundle can be anywhere: rewrite the bundled
+    // cache with the current absolute paths into the user cache directory
+    const fs::path loadersDir = res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders";
+    const fs::path loadersCacheTemplate = res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders.cache";
+    f_setenv_default("GDK_PIXBUF_MODULEDIR", loadersDir);
+    if (Glib::getenv("GDK_PIXBUF_MODULE_FILE").empty() and is_regular_file(loadersCacheTemplate)) {
+        try {
+            const std::string content = Glib::file_get_contents(loadersCacheTemplate.string());
+            std::string rewritten;
+            rewritten.reserve(content.size() + 1024);
+            std::istringstream iss{content};
+            std::string line;
+            while (std::getline(iss, line)) {
+                // a module line is the quoted file name alone, e.g. "libpixbufloader_svg.so"
+                if (line.size() > 2 and line.front() == '"' and line.back() == '"' and
+                    line.find('/') == std::string::npos and
+                    (line.find(".so\"") != std::string::npos or line.find(".dylib\"") != std::string::npos))
+                {
+                    line = "\"" + (loadersDir / line.substr(1, line.size() - 2)).string() + "\"";
+                }
+                rewritten += line;
+                rewritten += "\n";
+            }
+            const fs::path cacheDir = fs::path{Glib::get_user_cache_dir()} / "cherrytree";
+            if (g_mkdir_with_parents(cacheDir.c_str(), 0755) == 0) {
+                const fs::path cacheFile = cacheDir / "gdk-pixbuf-loaders.cache";
+                Glib::file_set_contents(cacheFile.string(), rewritten);
+                Glib::setenv("GDK_PIXBUF_MODULE_FILE", cacheFile.string(), true/*overwrite*/);
+            }
+        }
+        catch (Glib::Error& error) {
+            g_warning("gdk-pixbuf loaders cache: %s", error.what().c_str());
+        }
+    }
     f_setenv_default("GTK_DATA_PREFIX", res);
     f_setenv_default("GTK_EXE_PREFIX", res);
     f_setenv_default("GTK_PATH", res / "lib" / "gtk-3.0");
