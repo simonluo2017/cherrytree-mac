@@ -90,10 +90,11 @@ LOADERS_SRC="$BREW_PREFIX/lib/gdk-pixbuf-2.0/2.10.0/loaders"
 LOADERS_DST="$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders"
 mkdir -p "$LOADERS_DST"
 cp "$LOADERS_SRC"/*.so "$LOADERS_DST/"
-# the cache must be generated while the loaders still reference the Homebrew libraries;
-# the module paths are made relative so that they resolve against GDK_PIXBUF_MODULEDIR
-GDK_PIXBUF_MODULEDIR="$LOADERS_DST" gdk-pixbuf-query-loaders "$LOADERS_DST"/*.so \
-  | sed "s|\"$LOADERS_DST/|\"|" > "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+# the cache is generated from the Homebrew loaders (the copies cannot be dlopen'ed before their
+# @rpath references are rewritten by dylibbundler below); the module paths are made relative so
+# that at runtime they resolve against GDK_PIXBUF_MODULEDIR (set by the application)
+gdk-pixbuf-query-loaders "$LOADERS_SRC"/*.so \
+  | sed "s|\"$LOADERS_SRC/|\"|" > "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
 grep -q "svg" "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" || die "no svg loader in loaders.cache (brew install librsvg)"
 
 # -- copy the dylibs into the bundle and rewrite the install names
