@@ -24,8 +24,8 @@ license_url=https://huggingface.co/Qwen/Qwen2.5-1.5B-Instruct-GGUF/blob/main/LIC
 min_memory_gb=8
 context_train=32768
 description=Fast; tags, summaries, task extraction, simple questions.
-size_bytes=0
-sha256=
+size_bytes=1117320736
+sha256=6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e
 
 [qwen2.5-3b-instruct-q4_k_m]
 name=Qwen2.5 3B Instruct (Q4_K_M)
@@ -38,8 +38,8 @@ license_url=https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/blob/main/LICEN
 min_memory_gb=8
 context_train=32768
 description=Balanced default; note Q&A, explanations, mixed Chinese/English notes.
-size_bytes=0
-sha256=
+size_bytes=2104932768
+sha256=626b4a6678b86442240e33df819e00132d3ba7dddfe1cdc4fbb18e0a9615c62d
 
 [qwen2.5-7b-instruct-q4_k_m]
 name=Qwen2.5 7B Instruct (Q4_K_M)
@@ -54,3 +54,4 @@ context_train=32768
 description=Best quality; complex questions, code and long notes.
 size_bytes=0
 sha256=
+
