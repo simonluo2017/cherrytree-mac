@@ -172,7 +172,9 @@ int main(int argc, char *argv[])
     }
 
 #if defined(__APPLE__)
-    ensure_gsettings_schemas_available();
+    if (not fs::app_bundle_setup_env()) {
+        ensure_gsettings_schemas_available();
+    }
 #endif /* __APPLE__ */
 
 #ifdef HAVE_NLS

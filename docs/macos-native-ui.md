@@ -52,6 +52,24 @@ export PKG_CONFIG_PATH="$(brew --prefix icu4c)/lib/pkgconfig"
 ./build/cherrytree
 ```
 
+## 打包成 CherryTree.app / .dmg（安装到"应用程序"）
+
+脚本 `scripts/macos_make_app_dmg.sh` 会做 Release 编译，把程序、CherryTree 数据文件和 Homebrew 的
+GTK 运行库（dylib、图标主题、gdk-pixbuf 加载器、GSettings schema 等）一起装进一个自包含的
+`CherryTree.app`，再打成 dmg：
+
+```sh
+brew install librsvg dylibbundler hicolor-icon-theme   # 打包额外需要的工具
+cd cherrytree-mac
+./scripts/macos_make_app_dmg.sh            # 已经编译过可加 --no-build 跳过编译
+open build/macos/CherryTree-*-macos-*.dmg  # 把 CherryTree.app 拖到 Applications
+```
+
+- 第一次启动在访达里右键 → 打开（应用是本机 ad-hoc 签名，没有 Apple 公证）。
+- 安装后与 Homebrew 无关：程序从 `CherryTree.app/Contents/Resources` 读取自己的数据和 GTK 运行文件。
+- 以 App 形式运行时，"文稿"文件夹等权限提示会以 CherryTree 的名义弹出，不再依赖终端的权限。
+- 拼写检查的词典（enchant/hunspell）不在包内，有 Homebrew 的机器上照常可用。
+
 如果想用 GitHub 云端 macOS 机器编译：在仓库的 **Actions** 页启用工作流后，手动运行
 “MacOS/Brew” 工作流并选择本分支，运行完成后在该次运行的 Artifacts 里下载 `cherrytree`
 可执行文件（它依赖 Homebrew 安装的 GTK 库，运行的 Mac 上同样需要先执行第 1 步）。

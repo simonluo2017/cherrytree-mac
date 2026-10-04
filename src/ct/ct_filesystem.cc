@@ -160,6 +160,18 @@ void register_exe_path_detect_if_portable(const char* exe_path)
         // exePath: /tmp/.mount_CherryaUjoTO/usr/bin/cherrytree
         _AppImageUsrDir = _exePath.parent_path().parent_path();
     }
+    else {
+        // macOS application bundle (see scripts/macos_make_app_dmg.sh)
+        // e.g. /Applications/CherryTree.app/Contents/MacOS/cherrytree
+        //      /Applications/CherryTree.app/Contents/Resources/share/cherrytree
+        const fs::path macosDir = _exePath.parent_path();
+        const fs::path contentsDir = macosDir.parent_path();
+        if (macosDir.filename() == "MacOS" and contentsDir.filename() == "Contents" and
+            is_directory(contentsDir / "Resources" / "share" / "cherrytree"))
+        {
+            _AppImageUsrDir = contentsDir / "Resources";
+        }
+    }
 #endif // !_WIN32
     const fs::path portableConfigFile = portableConfigDir / CtConfig::ConfigFilename;
     if (is_regular_file(portableConfigFile)) {
@@ -520,6 +532,32 @@ std::uintmax_t remove_all(const path& dir)
         ++count;
     }
     return count;
+}
+
+bool app_bundle_setup_env()
+{
+    if (_AppImageUsrDir.empty() or not is_directory(_AppImageUsrDir / "share" / "cherrytree")) {
+        return false;
+    }
+    // self contained macOS application bundle: point GLib/GTK to the bundled runtime files
+    // (schemas, icon themes, gdk-pixbuf loaders, gtksourceview data) unless already set
+    const fs::path res = _AppImageUsrDir;
+    auto f_setenv_default = [](const char* name, const fs::path& value){
+        if (Glib::getenv(name).empty() and exists(value)) {
+            Glib::setenv(name, value.string(), true/*overwrite*/);
+        }
+    };
+    f_setenv_default("XDG_DATA_DIRS", res / "share");
+    f_setenv_default("GSETTINGS_SCHEMA_DIR", res / "share" / "glib-2.0" / "schemas");
+    f_setenv_default("GDK_PIXBUF_MODULEDIR", res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders");
+    f_setenv_default("GDK_PIXBUF_MODULE_FILE", res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders.cache");
+    f_setenv_default("GTK_DATA_PREFIX", res);
+    f_setenv_default("GTK_EXE_PREFIX", res);
+    f_setenv_default("GTK_PATH", res / "lib" / "gtk-3.0");
+    f_setenv_default("GIO_MODULE_DIR", res / "lib" / "gio" / "modules");
+    f_setenv_default("FONTCONFIG_PATH", res / "etc" / "fonts");
+    f_setenv_default("ENCHANT_CONFIG_DIR", res / "share" / "enchant");
+    return true;
 }
 
 fs::path get_cherrytree_datadir()

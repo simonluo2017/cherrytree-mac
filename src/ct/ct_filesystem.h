@@ -45,6 +45,10 @@ class path;
 std::string legacy_canonicalize_filename(const std::string& filename, const std::string& relative_to = "");
 
 void register_exe_path_detect_if_portable(const char* exe_path);
+// when running from a self contained application bundle (macOS .app, see
+// scripts/macos_make_app_dmg.sh) sets the environment so that GLib/GTK find the bundled
+// runtime files; returns false (and does nothing) otherwise. Call before GTK is initialised.
+bool app_bundle_setup_env();
 
 bool alter_locale_env_var(const std::string& key, const std::string& val);
 

@@ -1,0 +1,169 @@
+#!/bin/bash
+# Builds a self contained CherryTree.app (the Homebrew GTK libraries are bundled) and
+# packs it into a .dmg that can be dragged into /Applications.
+#
+# Requirements (Homebrew, Apple Silicon or Intel):
+#   brew install cmake ninja pkg-config python adwaita-icon-theme hicolor-icon-theme fmt gspell \
+#                gtkmm3 gtksourceview4 libxml++ spdlog uchardet fribidi curl vte3 webp-pixbuf-loader \
+#                librsvg dylibbundler
+#   brew link icu4c --force
+#
+# Usage:  ./scripts/macos_make_app_dmg.sh            (release build + app + dmg)
+#         ./scripts/macos_make_app_dmg.sh --no-build  (reuse ./build/cherrytree)
+#
+# Result: build/macos/CherryTree.app and build/macos/CherryTree-<version>-macos-<arch>.dmg
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+SRC_DIR="$(pwd)"
+BREW_PREFIX="$(brew --prefix)"
+APP_NAME="CherryTree"
+OUT_DIR="$SRC_DIR/build/macos"
+APP="$OUT_DIR/$APP_NAME.app"
+CONTENTS="$APP/Contents"
+MACOS="$CONTENTS/MacOS"
+RES="$CONTENTS/Resources"
+FRAMEWORKS="$CONTENTS/Frameworks"
+
+die() { echo "error: $*" >&2; exit 1; }
+
+for tool in brew cmake ninja dylibbundler rsvg-convert glib-compile-schemas gdk-pixbuf-query-loaders iconutil hdiutil codesign; do
+  command -v "$tool" > /dev/null 2>&1 || die "'$tool' not found (see the requirements at the top of this script)"
+done
+
+if [ "${1:-}" != "--no-build" ]; then
+  export PKG_CONFIG_PATH="$(brew --prefix icu4c)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+  ./build.sh release notests
+fi
+[ -x build/cherrytree ] || die "build/cherrytree not found"
+VERSION="$(sed -n 's/.*#define PACKAGE_VERSION "\([^"]*\)".*/\1/p' build/config.h | head -1)"
+[ -n "$VERSION" ] || VERSION="dev"
+ARCH="$(uname -m)"
+
+echo "== assembling $APP (version $VERSION, $ARCH)"
+rm -rf "$OUT_DIR"
+mkdir -p "$MACOS" "$RES/share/cherrytree" "$FRAMEWORKS"
+cp build/cherrytree "$MACOS/cherrytree"
+
+# -- CherryTree data (same layout as 'cmake --install': share/cherrytree, share/locale)
+cp -R language-specs styles "$RES/share/cherrytree/"
+mkdir -p "$RES/share/cherrytree/data" "$RES/share/cherrytree/icons"
+cp data/script3.js data/styles4.css data/user-style.xml "$RES/share/cherrytree/data/"
+cp icons/ct_home.svg "$RES/share/cherrytree/icons/"
+cp -R icons/Breeze_Dark_icons icons/Breeze_Light_icons "$RES/share/cherrytree/icons/"
+for lang_dir in po/*/; do
+  lang="$(basename "$lang_dir")"
+  if [ -d "$lang_dir/LC_MESSAGES" ]; then
+    mkdir -p "$RES/share/locale/$lang"
+    cp -R "$lang_dir/LC_MESSAGES" "$RES/share/locale/$lang/"
+  fi
+done
+
+# -- GTK runtime data from Homebrew
+echo "== bundling the GTK runtime data from $BREW_PREFIX"
+mkdir -p "$RES/share/glib-2.0/schemas"
+cp "$BREW_PREFIX"/share/glib-2.0/schemas/*.xml "$RES/share/glib-2.0/schemas/"
+glib-compile-schemas "$RES/share/glib-2.0/schemas"
+mkdir -p "$RES/share/icons"
+cp -R "$BREW_PREFIX/share/icons/Adwaita" "$RES/share/icons/"
+if [ -d "$BREW_PREFIX/share/icons/hicolor" ]; then
+  cp -R "$BREW_PREFIX/share/icons/hicolor" "$RES/share/icons/"
+fi
+cp -R "$BREW_PREFIX/share/gtksourceview-4" "$RES/share/"
+if [ -d "$BREW_PREFIX/share/mime" ]; then
+  cp -R "$BREW_PREFIX/share/mime" "$RES/share/"
+fi
+if [ -d "$BREW_PREFIX/etc/fonts" ]; then
+  mkdir -p "$RES/etc"
+  cp -R "$BREW_PREFIX/etc/fonts" "$RES/etc/"
+fi
+# gdk-pixbuf loaders: the svg loader is needed for the CherryTree icons, webp is optional
+LOADERS_SRC="$BREW_PREFIX/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+LOADERS_DST="$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders"
+mkdir -p "$LOADERS_DST"
+cp "$LOADERS_SRC"/*.so "$LOADERS_DST/"
+# the cache must be generated while the loaders still reference the Homebrew libraries;
+# the module paths are made relative so that they resolve against GDK_PIXBUF_MODULEDIR
+GDK_PIXBUF_MODULEDIR="$LOADERS_DST" gdk-pixbuf-query-loaders "$LOADERS_DST"/*.so \
+  | sed "s|\"$LOADERS_DST/|\"|" > "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+grep -q "svg" "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" || die "no svg loader in loaders.cache (brew install librsvg)"
+
+# -- copy the dylibs into the bundle and rewrite the install names
+echo "== bundling the dylibs"
+DYLIBB_ARGS=(-od -b -d "$FRAMEWORKS" -p "@executable_path/../Frameworks" -s "$BREW_PREFIX/lib" -x "$MACOS/cherrytree")
+for so in "$LOADERS_DST"/*.so; do
+  DYLIBB_ARGS+=(-x "$so")
+done
+dylibbundler "${DYLIBB_ARGS[@]}"
+
+# -- icon
+echo "== icon"
+ICONSET="$OUT_DIR/$APP_NAME.iconset"
+mkdir -p "$ICONSET"
+for size in 16 32 128 256 512; do
+  rsvg-convert -w "$size" -h "$size" icons/cherrytree.svg -o "$ICONSET/icon_${size}x${size}.png"
+  double=$((size * 2))
+  rsvg-convert -w "$double" -h "$double" icons/cherrytree.svg -o "$ICONSET/icon_${size}x${size}@2x.png"
+done
+iconutil -c icns "$ICONSET" -o "$RES/$APP_NAME.icns"
+rm -rf "$ICONSET"
+
+# -- Info.plist
+cat > "$CONTENTS/Info.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>$APP_NAME</string>
+  <key>CFBundleDisplayName</key><string>$APP_NAME</string>
+  <key>CFBundleIdentifier</key><string>net.giuspen.cherrytree</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleSignature</key><string>????</string>
+  <key>CFBundleExecutable</key><string>cherrytree</string>
+  <key>CFBundleIconFile</key><string>$APP_NAME.icns</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>LSMinimumSystemVersion</key><string>11.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>CherryTree Document</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>CFBundleTypeExtensions</key>
+      <array><string>ctb</string><string>ctd</string><string>ctx</string><string>ctz</string></array>
+      <key>CFBundleTypeIconFile</key><string>$APP_NAME.icns</string>
+    </dict>
+  </array>
+</dict>
+</plist>
+EOF
+echo "APPL????" > "$CONTENTS/PkgInfo"
+
+# -- ad hoc code signature (required to run native arm64 binaries; install_name_tool
+#    invalidated the signatures of the rewritten dylibs and loaders)
+echo "== signing (ad hoc)"
+find "$APP" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 | xargs -0 -n1 codesign --force --sign -
+codesign --force --sign - "$MACOS/cherrytree"
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP" && echo "signature ok"
+
+# -- dmg
+DMG="$OUT_DIR/$APP_NAME-$VERSION-macos-$ARCH.dmg"
+echo "== creating $DMG"
+DMG_ROOT="$OUT_DIR/dmg"
+rm -rf "$DMG_ROOT"
+mkdir -p "$DMG_ROOT"
+cp -R "$APP" "$DMG_ROOT/"
+ln -s /Applications "$DMG_ROOT/Applications"
+hdiutil create -volname "$APP_NAME" -srcfolder "$DMG_ROOT" -ov -format UDZO "$DMG"
+rm -rf "$DMG_ROOT"
+
+echo
+echo "done:"
+echo "  $APP"
+echo "  $DMG"
+echo "open the dmg and drag $APP_NAME.app into Applications; first launch: right click > Open"
