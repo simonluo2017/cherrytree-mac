@@ -1450,7 +1450,15 @@ void CtMainWin::init_native_app_menubar()
         const std::string& shortcut = action.get_shortcut(_pCtConfig);
         std::vector<Glib::ustring> accels;
         if (not shortcut.empty()) {
-            accels.push_back(CtMenu::to_primary_accel(shortcut));
+            accels.push_back(shortcut);
+#if defined(__APPLE__)
+            // like the official macOS build both the configured Control shortcut (Ctrl+S) and
+            // its Command variant (Cmd+S) work
+            const std::string commandVariant = str::replace(shortcut, "<control>", "<Primary>");
+            if (commandVariant != shortcut) {
+                accels.push_back(commandVariant);
+            }
+#endif // __APPLE__
         }
 #if defined(__APPLE__)
         // the standard macOS Preferences key equivalent in addition to the configured shortcut

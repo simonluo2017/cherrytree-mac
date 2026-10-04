@@ -6,7 +6,7 @@
 | 功能 | 说明 | 配置项 (`~/.config/cherrytree/config.cfg`) |
 | --- | --- | --- |
 | 原生应用菜单栏 | 菜单从窗口内移到 macOS 顶部全局菜单栏，带 “CherryTree” 应用菜单（About / Preferences… / Quit） | `native_app_menubar`（macOS 默认 `true`） |
-| 快捷键 | 与官方 macOS 版一致：应用快捷键保持 Ctrl 组合（Ctrl+S、Ctrl+R…），只有剪贴板 ⌘X/⌘C/⌘V/⌘A、⌘,（偏好设置）和 ⌘Q 用 Command | 随 `native_app_menubar` |
+| 快捷键 | 与官方 macOS 版一致：每个应用快捷键的 Ctrl 组合和 ⌘ 组合都可用（Ctrl+S / ⌘S、Ctrl+R / ⌘R、Ctrl+Z / ⌘Z…），另有剪贴板 ⌘X/⌘C/⌘V/⌘A、⌘,（偏好设置）和 ⌘Q | 随 `native_app_menubar` |
 | 跟随系统外观 | 0 = 跟随 macOS 浅色/深色，1 = 浅色，2 = 深色 | `ui_appearance`（默认 `0`） |
 | 原生风格窗口 | 侧边栏圆角选中、细分割线、扁平圆角工具栏、标题条式节点名、安静的状态栏 | `native_chrome`（默认 `true`） |
 
