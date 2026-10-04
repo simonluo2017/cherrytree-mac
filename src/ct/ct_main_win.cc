@@ -1457,9 +1457,40 @@ void CtMainWin::init_native_app_menubar()
         if ("preferences_dlg" == action.id) accels.push_back("<Primary>comma");
         else if ("toggle_fullscreen" == action.id) accels.push_back("<Primary><Control>f");
         else if ("ct_help" == action.id) accels.push_back("<Primary>question");
+        else if ("act_redo" == action.id) accels.push_back("<Primary><Shift>z");
 #endif // __APPLE__
         rApp->set_accels_for_action(CtMenu::gio_action_name(action.id), accels);
     }
+    // clipboard: the GtkTextView/GtkEntry key bindings are Control based and do not react to
+    // Command on macOS, so Cmd+X/C/V/A are routed to the focused text widget through actions
+    auto f_focused_editable = [this]()->GtkWidget*{
+        Gtk::Widget* pFocus = get_focus();
+        if (pFocus and (GTK_IS_TEXT_VIEW(pFocus->gobj()) or GTK_IS_ENTRY(pFocus->gobj()))) {
+            return pFocus->gobj();
+        }
+        return nullptr;
+    };
+    if (not lookup_action("edit-copy")) {
+        add_action("edit-cut", [f_focused_editable](){
+            if (GtkWidget* pWidget = f_focused_editable()) g_signal_emit_by_name(pWidget, "cut-clipboard");
+        });
+        add_action("edit-copy", [f_focused_editable](){
+            if (GtkWidget* pWidget = f_focused_editable()) g_signal_emit_by_name(pWidget, "copy-clipboard");
+        });
+        add_action("edit-paste", [f_focused_editable](){
+            if (GtkWidget* pWidget = f_focused_editable()) g_signal_emit_by_name(pWidget, "paste-clipboard");
+        });
+        add_action("edit-select-all", [f_focused_editable](){
+            GtkWidget* pWidget = f_focused_editable();
+            if (not pWidget) return;
+            if (GTK_IS_TEXT_VIEW(pWidget)) g_signal_emit_by_name(pWidget, "select-all", TRUE);
+            else gtk_editable_select_region(GTK_EDITABLE(pWidget), 0, -1);
+        });
+    }
+    rApp->set_accels_for_action("win.edit-cut", {"<Primary>x"});
+    rApp->set_accels_for_action("win.edit-copy", {"<Primary>c"});
+    rApp->set_accels_for_action("win.edit-paste", {"<Primary>v"});
+    rApp->set_accels_for_action("win.edit-select-all", {"<Primary>a"});
     show_hide_menubar(_pCtConfig->menubarVisible);
     menu_set_items_recent_documents();
     menu_set_bookmark_menu_items();

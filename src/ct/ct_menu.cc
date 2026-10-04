@@ -585,6 +585,25 @@ Glib::RefPtr<Gio::Menu> CtMenu::build_gio_menubar(const bool reuse_existing)
 
             MenuFrame frame;
             frame.menu = submenu;
+#if GTKMM_MAJOR_VERSION < 4
+            if (stack.empty() and action_id == "EditMenu") {
+                // standard clipboard entries with the platform primary key equivalents
+                // (Cmd+X/C/V/A on macOS); the window actions are registered by
+                // CtMainWin::init_native_app_menubar and act on the focused text widget
+                auto sectionClipboard = Gio::Menu::create();
+                for (const auto& [label, action, accel] : std::initializer_list<std::tuple<const char*, const char*, const char*>>{
+                        {_("Cu_t"), "win.edit-cut", "<Primary>x"},
+                        {_("_Copy"), "win.edit-copy", "<Primary>c"},
+                        {_("_Paste"), "win.edit-paste", "<Primary>v"},
+                        {_("Select _All"), "win.edit-select-all", "<Primary>a"}})
+                {
+                    auto item = Gio::MenuItem::create(label, action);
+                    item->set_attribute_value("accel", Glib::Variant<Glib::ustring>::create(accel));
+                    sectionClipboard->append_item(item);
+                }
+                submenu->append_section({}, sectionClipboard);
+            }
+#endif /* GTKMM_MAJOR_VERSION < 4 */
             ensure_section(frame);
             stack.push_back(frame);
 
