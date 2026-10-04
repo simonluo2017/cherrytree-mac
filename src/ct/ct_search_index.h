@@ -31,6 +31,23 @@
 
 struct sqlite3;
 
+struct CtChunk
+{
+    gint64        chunk_id{0};
+    gint64        node_id{0};
+    int           seq{0};
+    int           start_offset{0};
+    Glib::ustring text;
+};
+
+struct CtSemanticResult
+{
+    gint64        chunk_id{0};
+    gint64        node_id{0};
+    Glib::ustring text;
+    double        distance{0.0}; // cosine distance, lower is closer
+};
+
 struct CtSearchResult
 {
     gint64        node_id{0};
@@ -81,6 +98,29 @@ public:
     /// bm25 ranked search; the whole query must match (AND of the terms, prefix match for latin words)
     std::vector<CtSearchResult> search(const Glib::ustring& user_query, const int limit) const;
 
+    // ---- semantic index (chunks + sqlite-vec vectors), see docs
+    /// set the embedding model; a different model/dimension than the stored one drops the vectors
+    bool semantic_configure(const std::string& model_name, const int dim);
+    std::string semantic_model_name() const;
+    int semantic_dim() const;
+    /// split a node text into overlapping chunks (the node name is prefixed to each)
+    static std::vector<Glib::ustring> make_chunks(const Glib::ustring& node_name, const Glib::ustring& body,
+                                                  const size_t target_chars = 1000, const size_t overlap_chars = 200);
+    /// replace the chunks of a node; chunks whose text is unchanged keep their vector
+    bool replace_node_chunks(const gint64 node_id, const std::vector<Glib::ustring>& chunks);
+    bool remove_node_chunks(const gint64 node_id);
+    /// chunks that still need a vector
+    std::vector<CtChunk> pending_chunks(const int limit) const;
+    gint64 count_pending_chunks() const;
+    gint64 count_embedded_chunks() const;
+    bool store_embedding(const gint64 chunk_id, const std::vector<float>& vec);
+    /// nearest chunks to a query vector
+    std::vector<CtSemanticResult> semantic_search(const std::vector<float>& query, const int limit) const;
+    /// mean vector of a node's chunks (empty when none embedded)
+    std::vector<float> node_vector(const gint64 node_id) const;
+    /// register the sqlite-vec extension for every connection (idempotent)
+    static void register_vec_extension();
+
     // helpers, public for the tests
     static std::vector<Glib::ustring> query_terms(const Glib::ustring& user_query);
     static Glib::ustring build_fts_query(const Glib::ustring& user_query);
@@ -91,6 +131,9 @@ public:
 
 private:
     bool _exec(const char* sql, std::string* pError = nullptr);
+    bool _set_meta(const std::string& key, const std::string& value);
+    std::string _get_meta(const std::string& key) const;
+    bool _ensure_vec_table(const int dim);
 
     sqlite3* _pDb{nullptr};
     fs::path _path;

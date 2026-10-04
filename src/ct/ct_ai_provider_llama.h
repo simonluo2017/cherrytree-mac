@@ -37,6 +37,8 @@ public:
         int n_ctx{4096};
         int n_threads{0};      // 0 = auto
         int n_gpu_layers{-1};  // -1 = all (Metal on macOS)
+        bool embedding{false}; // load as an embedding model
+        std::string pooling;   // "mean" | "last" | "cls" | "" (from the model metadata)
     };
 
     explicit CtAiProviderLlama(const Settings& settings);
@@ -52,6 +54,10 @@ public:
                   const CtAiTokenCallback& on_piece,
                   const CtAiCancelToken& cancel,
                   std::string& error) override;
+    bool embed(const std::vector<std::string>& texts,
+               std::vector<std::vector<float>>& out,
+               std::string& error) override;
+    int embedding_dim() const override;
 
     const Settings& settings() const { return _settings; }
 

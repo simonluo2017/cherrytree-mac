@@ -122,24 +122,80 @@ std::string CtAiService::model_name() const
 
 void CtAiService::apply_settings()
 {
-    if (_busy) return; // applied at the next run
-    _uProvider.reset();
+    if (not _busy) {
+        _uProvider.reset();
 #ifdef HAVE_LLAMA_CPP
-    CtAiProviderLlama::Settings settings;
-    settings.model_path = _pCtConfig->aiModelPath;
-    settings.n_ctx = _pCtConfig->aiContextSize;
-    settings.n_threads = _pCtConfig->aiThreads;
-    _uProvider = std::make_unique<CtAiProviderLlama>(settings);
+        CtAiProviderLlama::Settings settings;
+        settings.model_path = _pCtConfig->aiModelPath;
+        settings.n_ctx = _pCtConfig->aiContextSize;
+        settings.n_threads = _pCtConfig->aiThreads;
+        _uProvider = std::make_unique<CtAiProviderLlama>(settings);
 #endif
+    }
+    {
+        std::lock_guard<std::mutex> lock{_embeddingMutex};
+        bool changed = true;
+#ifdef HAVE_LLAMA_CPP
+        if (auto* pLlama = dynamic_cast<CtAiProviderLlama*>(_uEmbeddingProvider.get())) {
+            changed = pLlama->settings().model_path != _pCtConfig->aiEmbeddingModelPath or
+                      pLlama->settings().pooling != _pCtConfig->aiEmbeddingPooling or
+                      pLlama->settings().n_threads != _pCtConfig->aiThreads;
+        }
+        if (changed) {
+            _uEmbeddingProvider.reset();
+            CtAiProviderLlama::Settings esettings;
+            esettings.model_path = _pCtConfig->aiEmbeddingModelPath;
+            esettings.n_ctx = 2048;
+            esettings.n_threads = _pCtConfig->aiThreads;
+            esettings.embedding = true;
+            esettings.pooling = _pCtConfig->aiEmbeddingPooling;
+            _uEmbeddingProvider = std::make_unique<CtAiProviderLlama>(esettings);
+        }
+#else
+        (void)changed;
+#endif
+    }
+}
+
+bool CtAiService::is_embedding_configured() const
+{
+    return _uEmbeddingProvider and not _pCtConfig->aiEmbeddingModelPath.empty() and fs::is_regular_file(_pCtConfig->aiEmbeddingModelPath);
+}
+
+std::string CtAiService::embedding_model_id() const
+{
+    const std::string& path = _pCtConfig->aiEmbeddingModelPath;
+    const auto slash = path.find_last_of("/\\");
+    return slash == std::string::npos ? path : path.substr(slash + 1);
+}
+
+bool CtAiService::embed_texts(const std::vector<std::string>& texts, std::vector<std::vector<float>>& out, std::string& error)
+{
+    std::lock_guard<std::mutex> lock{_embeddingMutex};
+    if (not _uEmbeddingProvider or _pCtConfig->aiEmbeddingModelPath.empty()) { error = "No embedding model configured"; return false; }
+    if (not _uEmbeddingProvider->is_loaded() and not _uEmbeddingProvider->load(error)) return false;
+    return _uEmbeddingProvider->embed(texts, out, error);
+}
+
+bool CtAiService::embed_query(const std::string& query, std::vector<float>& out, std::string& error)
+{
+    std::vector<std::vector<float>> vecs;
+    if (not embed_texts({_pCtConfig->aiEmbeddingQueryPrefix + query}, vecs, error) or vecs.empty()) return false;
+    out = std::move(vecs.front());
+    return true;
 }
 
 void CtAiService::unload_model()
 {
     _unloadTimer.disconnect();
-    if (_busy or not _uProvider) return;
-    if (_uProvider->is_loaded()) {
+    if (not _busy and _uProvider and _uProvider->is_loaded()) {
         spdlog::info("ai: model unloaded");
         _uProvider->unload();
+    }
+    std::lock_guard<std::mutex> lock{_embeddingMutex};
+    if (_uEmbeddingProvider and _uEmbeddingProvider->is_loaded()) {
+        spdlog::info("ai: embedding model unloaded");
+        _uEmbeddingProvider->unload();
     }
 }
 

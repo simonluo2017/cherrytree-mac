@@ -278,6 +278,10 @@ void CtConfig::_populate_keyfile_from_data()
     _uKeyFile->set_integer(_currentGroup, "ai_max_tokens", aiMaxTokens);
     _uKeyFile->set_double(_currentGroup, "ai_temperature", aiTemperature);
     _uKeyFile->set_integer(_currentGroup, "ai_unload_minutes", aiUnloadMinutes);
+    _uKeyFile->set_string(_currentGroup, "ai_embedding_model_path", aiEmbeddingModelPath);
+    _uKeyFile->set_string(_currentGroup, "ai_embedding_pooling", aiEmbeddingPooling);
+    _uKeyFile->set_string(_currentGroup, "ai_embedding_query_prefix", aiEmbeddingQueryPrefix);
+    _uKeyFile->set_boolean(_currentGroup, "semantic_index_enabled", semanticIndexEnabled);
     _uKeyFile->set_integer(_currentGroup, "max_matches_in_page", maxMatchesInPage);
     _uKeyFile->set_integer(_currentGroup, "toolbar_icon_size", toolbarIconSize);
     _uKeyFile->set_integer(_currentGroup, "search_multi_words", multipleWordsSearchType);
@@ -599,6 +603,10 @@ void CtConfig::_populate_data_from_keyfile()
     _populate_int_from_keyfile("ai_max_tokens", &aiMaxTokens);
     _populate_double_from_keyfile("ai_temperature", &aiTemperature);
     _populate_int_from_keyfile("ai_unload_minutes", &aiUnloadMinutes);
+    _populate_string_from_keyfile("ai_embedding_model_path", &aiEmbeddingModelPath);
+    _populate_string_from_keyfile("ai_embedding_pooling", &aiEmbeddingPooling);
+    _populate_string_from_keyfile("ai_embedding_query_prefix", &aiEmbeddingQueryPrefix);
+    _populate_bool_from_keyfile("semantic_index_enabled", &semanticIndexEnabled);
     _populate_int_from_keyfile("max_matches_in_page", &maxMatchesInPage);
     _populate_int_from_keyfile("toolbar_icon_size", &toolbarIconSize);
     _populate_int_from_keyfile("search_multi_words", &multipleWordsSearchType);

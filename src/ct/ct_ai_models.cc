@@ -140,6 +140,10 @@ bool CtModelManager::load_manifest(const fs::path& manifest)
             if (keyFile.has_key(group, "size_bytes")) e.size_bytes = static_cast<uint64_t>(keyFile.get_uint64(group, "size_bytes"));
             e.sha256 = get("sha256");
             e.url = get("url");
+            e.kind = get("kind");
+            e.pooling = get("pooling");
+            e.query_prefix = get("query_prefix");
+            if (keyFile.has_key(group, "embedding_dim")) e.embedding_dim = keyFile.get_integer(group, "embedding_dim");
             // only files named like a model from a two level HF repo are accepted
             if (e.repo.empty() or e.file.empty() or e.repo.find('/') == std::string::npos or
                 e.file.find('/') != std::string::npos or e.file.find("..") != std::string::npos) {

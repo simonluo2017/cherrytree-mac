@@ -73,6 +73,16 @@ public:
     void apply_settings();
     void unload_model();
 
+    // ---- embedding model (separate from the generation model)
+    bool is_embedding_configured() const;
+    CtAiProvider* embedding_provider() { return _uEmbeddingProvider.get(); }
+    /// blocking: load the embedding model if needed and embed the texts (call from any thread, one at a time)
+    bool embed_texts(const std::vector<std::string>& texts, std::vector<std::vector<float>>& out, std::string& error);
+    /// blocking: embed a search query (the configured instruction prefix is prepended)
+    bool embed_query(const std::string& query, std::vector<float>& out, std::string& error);
+    /// identifier of the embedding model for the index metadata (file name)
+    std::string embedding_model_id() const;
+
     /// start a generation; callbacks run on the main thread; returns false if busy or not configured
     bool run(const CtAiRequest& request, PieceCallback on_piece, DoneCallback on_done);
     void cancel();
@@ -85,6 +95,8 @@ private:
     CtConfig* const _pCtConfig;
     CtModelManager _modelManager;
     std::unique_ptr<CtAiProvider> _uProvider;
+    std::unique_ptr<CtAiProvider> _uEmbeddingProvider;
+    std::mutex _embeddingMutex;
     std::map<std::string, CtAiPrompt> _prompts;
 
     std::thread _worker;

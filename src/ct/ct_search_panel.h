@@ -37,6 +37,7 @@ class CtSearchPanel : public Gtk::Box
 {
 public:
     enum class Scope { WholeDocument = 0, CurrentBranch = 1, CurrentNode = 2 };
+    enum class Mode { Keyword = 0, Semantic = 1, Hybrid = 2 };
 
     explicit CtSearchPanel(CtMainWin* pCtMainWin);
 
@@ -44,6 +45,8 @@ public:
     /// re-run the current query (e.g. after the index changed)
     void refresh();
     void set_status(const Glib::ustring& text);
+    /// list the nodes semantically closest to the current node
+    void show_related_to_current_node();
 
 private:
     struct ResultColumns : public Gtk::TreeModelColumnRecord {
@@ -57,12 +60,20 @@ private:
     void _jump_to(const gint64 node_id);
     std::set<gint64> _scope_node_ids() const;
     Scope _scope() const;
+    Mode _mode() const;
+    void _update_mode_availability();
+    struct Hit { gint64 node_id{0}; Glib::ustring name, path, snippet; double score{0.0}; };
+    void _show_hits(const std::vector<Hit>& hits, const Glib::ustring& query, const std::set<gint64>& scope_ids);
+    static Glib::ustring _chunk_excerpt(const Glib::ustring& chunk_text);
 
     CtMainWin* const      _pCtMainWin;
     Gtk::Box              _topBox{Gtk::ORIENTATION_HORIZONTAL, 4};
     Gtk::SearchEntry      _entry;
     Gtk::Button           _closeButton;
     Gtk::ComboBoxText     _scopeCombo;
+    Gtk::Box              _modeBox{Gtk::ORIENTATION_HORIZONTAL, 4};
+    Gtk::ComboBoxText     _modeCombo;
+    Gtk::Button           _relatedButton;
     Gtk::ScrolledWindow   _scrolled;
     ResultColumns         _columns;
     Glib::RefPtr<Gtk::ListStore> _rStore;

@@ -78,6 +78,17 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 - 关闭：配置项 `search_index_enabled=false`（config.cfg，暂无界面开关）。
 - 未保存过的新文档没有索引文件，面板会提示先保存。
 
+### 语义检索（Embedding + sqlite-vec）
+
+在同一个 `.ai-index.sqlite` 里增加了向量索引（vendor 进仓库的 sqlite-vec，`third_party/sqlite-vec`）。
+
+- **嵌入模型**：Preferences → AI (Local Model) 目录里 tier 为 `embedding` 的条目（默认推荐 Qwen 官方 **Qwen3 Embedding 0.6B**，中英多语言，1024 维；备选 Nomic Embed Text v1.5）。下载后选中 → Use This Model，它会填入 "Embedding Model (GGUF)" 一栏并带上该模型的 pooling 与查询前缀。嵌入模型与生成模型各自独立加载/卸载。
+- **分块**：节点纯文本按段落切成约 1000 字符一块、相邻块重叠 200 字符，每块以节点名开头；只对内容变化的块重新嵌入，换嵌入模型会整体重建（meta 记录 `embedding_model` / `embedding_dim`）。
+- **后台建索引**：FTS 索引完成后自动开始，后台线程每批 8 块，状态栏显示 "Semantic index: N chunks remaining"；编辑节点后同样增量更新。Preferences 里的 "Keep a Semantic Search Index" 可关闭。
+- **检索面板的模式**：Keyword（原来的 FTS）/ Semantic / Hybrid（默认，有嵌入模型时）。Hybrid 用 RRF（倒数排名融合）合并两路结果；语义结果显示最相关的块摘要。没有嵌入模型时只有 Keyword 可用。
+- **Related**：面板里的 Related 按钮列出与当前节点语义最接近的笔记（节点向量 = 各块向量平均），带相似度百分比，点击跳转。不调用生成模型。
+- 查询向量在主线程同步计算；如果后台正好在嵌入一批块，会等那一批结束（通常不到一秒）。
+
 ## 本地 AI（llama.cpp，第一阶段）
 
 完全在本机运行，没有任何网络请求。推理后端是 vendor 进仓库的 llama.cpp（`third_party/llama.cpp`，锁定 commit，见其中的 `VENDOR.md`），macOS 上用 Metal，模型格式 GGUF。

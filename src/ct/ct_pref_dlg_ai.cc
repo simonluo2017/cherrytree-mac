@@ -47,13 +47,33 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     label_model_info->set_xalign(0.0);
     label_model_info->get_style_context()->add_class("dim-label");
 #if GTKMM_MAJOR_VERSION < 4
+    auto hbox_embed = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 4/*spacing*/});
+    auto label_embed = Gtk::manage(new Gtk::Label{_("Embedding Model (GGUF)")});
+    auto entry_embed = Gtk::manage(new Gtk::Entry{});
+    entry_embed->set_text(_pConfig->aiEmbeddingModelPath);
+    entry_embed->set_hexpand(true);
+    entry_embed->set_placeholder_text(_("used by the semantic search index; pick one in the catalog and press Use This Model"));
+    auto check_semantic = Gtk::manage(new Gtk::CheckButton{_("Keep a Semantic Search Index of the Document (embeds the notes in the background)")});
+    check_semantic->set_active(_pConfig->semanticIndexEnabled);
+    hbox_embed->pack_start(*label_embed, false, false);
+    hbox_embed->pack_start(*entry_embed, true, true);
     hbox_model->pack_start(*label_model, false, false);
     hbox_model->pack_start(*entry_model, true, true);
     hbox_model->pack_start(*button_browse, false, false);
     vbox_model->pack_start(*label_intro, false, false);
     vbox_model->pack_start(*hbox_model, false, false);
     vbox_model->pack_start(*label_model_info, false, false);
+    vbox_model->pack_start(*hbox_embed, false, false);
+    vbox_model->pack_start(*check_semantic, false, false);
     vbox_model->pack_start(*button_unload, false, false);
+    entry_embed->signal_changed().connect([this, entry_embed](){
+        _pConfig->aiEmbeddingModelPath = str::trim(entry_embed->get_text()).raw();
+        apply_for_each_window([](CtMainWin* win) { if (win->ai_service()) { win->ai_service()->apply_settings(); win->semantic_index_kick(); } });
+    });
+    check_semantic->signal_toggled().connect([this, check_semantic](){
+        _pConfig->semanticIndexEnabled = check_semantic->get_active();
+        apply_for_each_window([](CtMainWin* win) { win->search_index_enqueue_all(true/*force*/); win->semantic_index_kick(); });
+    });
 #else
     hbox_model->append(*label_model);
     hbox_model->append(*entry_model);
@@ -254,9 +274,17 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
         f_update_buttons();
     });
     button_cancel->signal_clicked().connect([&manager](){ manager.cancel_download(); });
-    button_use->signal_clicked().connect([f_selected_entry, &manager, entry_model](){
+    button_use->signal_clicked().connect([this, f_selected_entry, &manager, entry_model, entry_embed](){
         const CtModelEntry* pEntry = f_selected_entry();
-        if (pEntry) entry_model->set_text(manager.model_path(*pEntry).string());
+        if (not pEntry) return;
+        if (pEntry->is_embedding()) {
+            _pConfig->aiEmbeddingPooling = pEntry->pooling;
+            _pConfig->aiEmbeddingQueryPrefix = pEntry->query_prefix;
+            entry_embed->set_text(manager.model_path(*pEntry).string());
+        }
+        else {
+            entry_model->set_text(manager.model_path(*pEntry).string());
+        }
     });
     button_delete->signal_clicked().connect([this, f_selected_entry, &manager, f_refresh_list, f_update_buttons, entry_model](){
         const CtModelEntry* pEntry = f_selected_entry();

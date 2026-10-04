@@ -24,6 +24,7 @@
 
 #include <llama.h>
 #include <algorithm>
+#include <cmath>
 #include <thread>
 
 namespace {
@@ -68,8 +69,8 @@ CtAiProviderLlama::~CtAiProviderLlama()
 CtAiCapabilities CtAiProviderLlama::capabilities() const
 {
     CtAiCapabilities caps;
-    caps.text = true;
-    caps.embedding = false;
+    caps.text = not _settings.embedding;
+    caps.embedding = _settings.embedding;
     caps.context_size = _pCtx ? static_cast<int>(llama_n_ctx(_pCtx)) : _settings.n_ctx;
     return caps;
 }
@@ -121,6 +122,14 @@ bool CtAiProviderLlama::load(std::string& error)
     const int n_ctx_train = llama_model_n_ctx_train(_pModel);
     cparams.n_ctx = static_cast<uint32_t>(_settings.n_ctx > 0 ? std::min(_settings.n_ctx, std::max(n_ctx_train, 512)) : n_ctx_train);
     cparams.n_batch = std::min<uint32_t>(cparams.n_ctx, 2048);
+    if (_settings.embedding) {
+        cparams.embeddings = true;
+        cparams.n_ubatch = cparams.n_batch; // non causal models need the whole batch at once
+        if (_settings.pooling == "mean")      cparams.pooling_type = LLAMA_POOLING_TYPE_MEAN;
+        else if (_settings.pooling == "last") cparams.pooling_type = LLAMA_POOLING_TYPE_LAST;
+        else if (_settings.pooling == "cls")  cparams.pooling_type = LLAMA_POOLING_TYPE_CLS;
+        else                                  cparams.pooling_type = LLAMA_POOLING_TYPE_UNSPECIFIED;
+    }
     const int hw_threads = static_cast<int>(std::thread::hardware_concurrency());
     const int n_threads = _settings.n_threads > 0 ? _settings.n_threads : std::max(1, hw_threads > 2 ? hw_threads - 2 : hw_threads);
     cparams.n_threads = n_threads;
@@ -243,4 +252,56 @@ bool CtAiProviderLlama::generate(const CtAiRequest& request,
     }
     llama_sampler_free(pSampler);
     return ok;
+}
+
+int CtAiProviderLlama::embedding_dim() const
+{
+    return _pModel ? llama_model_n_embd(_pModel) : 0;
+}
+
+bool CtAiProviderLlama::embed(const std::vector<std::string>& texts,
+                              std::vector<std::vector<float>>& out,
+                              std::string& error)
+{
+    std::lock_guard<std::mutex> lock{_mutex};
+    out.clear();
+    if (not _pCtx) { error = "Embedding model not loaded"; return false; }
+    if (not _settings.embedding) { error = "The loaded model is not an embedding model"; return false; }
+    if (llama_pooling_type(_pCtx) == LLAMA_POOLING_TYPE_NONE) { error = "The embedding model has no pooling"; return false; }
+    const int n_embd = llama_model_n_embd(_pModel);
+    const int n_batch = static_cast<int>(llama_n_batch(_pCtx));
+    const bool add_bos = llama_vocab_get_add_bos(_pVocab);
+    const bool has_encoder = llama_model_has_encoder(_pModel);
+    for (const std::string& text : texts) {
+        // tokenize, truncated to the batch size
+        int32_t n = -llama_tokenize(_pVocab, text.c_str(), static_cast<int32_t>(text.size()), nullptr, 0, add_bos, true);
+        std::vector<llama_token> tokens(std::max(n, 1));
+        n = llama_tokenize(_pVocab, text.c_str(), static_cast<int32_t>(text.size()), tokens.data(), static_cast<int32_t>(tokens.size()), add_bos, true);
+        if (n < 0) { error = "Failed to tokenize a text for embedding"; return false; }
+        if (n > n_batch) n = n_batch; // truncate long chunks
+        if (n == 0) { out.emplace_back(n_embd, 0.0f); continue; }
+        tokens.resize(n);
+        llama_memory_clear(llama_get_memory(_pCtx), true);
+        llama_batch batch = llama_batch_init(n, 0, 1);
+        for (int i = 0; i < n; ++i) {
+            batch.token[batch.n_tokens] = tokens[i];
+            batch.pos[batch.n_tokens] = i;
+            batch.n_seq_id[batch.n_tokens] = 1;
+            batch.seq_id[batch.n_tokens][0] = 0;
+            batch.logits[batch.n_tokens] = 1;
+            ++batch.n_tokens;
+        }
+        const int rc = has_encoder ? llama_encode(_pCtx, batch) : llama_decode(_pCtx, batch);
+        llama_batch_free(batch);
+        if (rc != 0) { error = "llama_decode failed while embedding"; return false; }
+        const float* pEmb = llama_get_embeddings_seq(_pCtx, 0);
+        if (not pEmb) { error = "No embedding returned by the model"; return false; }
+        std::vector<float> vec(pEmb, pEmb + n_embd);
+        double norm{0.0};
+        for (const float v : vec) norm += static_cast<double>(v) * v;
+        norm = std::sqrt(norm);
+        if (norm > 0.0) for (float& v : vec) v = static_cast<float>(v / norm);
+        out.push_back(std::move(vec));
+    }
+    return true;
 }

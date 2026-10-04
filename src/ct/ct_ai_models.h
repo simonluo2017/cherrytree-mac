@@ -50,6 +50,11 @@ struct CtModelEntry
     uint64_t    size_bytes{0}; // 0 = not pinned
     std::string sha256;        // empty = not pinned
     std::string url;           // optional explicit download URL (mirror); default is the Hugging Face resolve URL
+    std::string kind;          // "generation" (default) | "embedding"
+    std::string pooling;       // embedding models: "" | mean | last | cls
+    std::string query_prefix;  // embedding models: instruction prepended to search queries
+    int         embedding_dim{0};
+    bool is_embedding() const { return kind == "embedding"; }
 
     std::string download_url() const { return url.empty() ? "https://huggingface.co/" + repo + "/resolve/main/" + file : url; }
     std::string repo_url() const { return "https://huggingface.co/" + repo; }

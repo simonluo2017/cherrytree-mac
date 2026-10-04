@@ -92,4 +92,11 @@ public:
                           const CtAiTokenCallback& on_piece,
                           const CtAiCancelToken& cancel,
                           std::string& error) = 0;
+
+    /// embed texts (L2 normalised vectors); only when capabilities().embedding
+    virtual bool embed(const std::vector<std::string>& texts,
+                       std::vector<std::vector<float>>& out,
+                       std::string& error) { (void)texts; (void)out; error = "Embeddings are not supported by this provider"; return false; }
+    /// dimension of the embeddings, 0 when unknown / not loaded
+    virtual int embedding_dim() const { return 0; }
 };

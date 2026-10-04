@@ -31,6 +31,9 @@
 #include <glibmm/i18n.h>
 #include <memory>
 #include <set>
+#include <thread>
+#include <atomic>
+#include <mutex>
 #include <gtkmm.h>
 #include <sigc++/sigc++.h>
 #include <sigc++/signal.h>
@@ -177,6 +180,10 @@ public:
     void search_index_enqueue_node(const gint64 node_id);
     void search_index_remove_nodes(const std::vector<gint64>& node_ids);
     void search_index_rebuild();
+    /// (re)start the background embedding of pending chunks (needs an embedding model)
+    void semantic_index_kick();
+    bool semantic_index_busy() const { return _semanticBusy; }
+    gint64 semantic_index_pending() const;
     void search_panel_show(const bool show);
     bool search_panel_visible() const;
 
@@ -423,6 +430,20 @@ private:
     size_t                       _searchIndexQueueTotal{0};
     sigc::connection             _searchIndexIdle;
     sigc::connection             _searchIndexDebounce;
+    // semantic index: chunks are embedded on a worker thread, results stored on the main thread
+    Glib::Dispatcher             _semanticDispatcher;
+    std::thread                  _semanticWorker;
+    std::atomic<bool>            _semanticBusy{false};
+    bool                         _semanticConfigured{false};
+    bool                         _semanticDispatcherConnected{false};
+    std::mutex                   _semanticMutex;
+    std::vector<CtChunk>         _semanticBatch;
+    std::vector<std::vector<float>> _semanticVectors;
+    int                          _semanticDim{0};
+    bool                         _semanticOk{false};
+    std::string                  _semanticError;
+    void _semantic_on_done();
+    void _semantic_start_batch();
     void _search_index_start_idle();
     bool _search_index_idle_tick();
     Gtk::Box                     _hBoxVte{Gtk::ORIENTATION_HORIZONTAL};

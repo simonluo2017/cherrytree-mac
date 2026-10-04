@@ -122,6 +122,11 @@ public:
     int                                         aiMaxTokens{1024};
     double                                      aiTemperature{0.4};
     int                                         aiUnloadMinutes{10};
+    // embedding model for the semantic search index
+    std::string                                 aiEmbeddingModelPath;
+    std::string                                 aiEmbeddingPooling;      // "" (model default) | mean | last | cls
+    std::string                                 aiEmbeddingQueryPrefix;  // instruction prepended to queries (e.g. Qwen3-Embedding)
+    bool                                        semanticIndexEnabled{true};
     int                                         maxMatchesInPage{500};
     int                                         toolbarIconSize{1};
     int                                         multipleWordsSearchType{0}; // 0: exact match, 1: disregard order (AND), 2: match any (OR)

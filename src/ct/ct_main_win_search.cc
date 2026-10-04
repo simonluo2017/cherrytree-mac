@@ -39,6 +39,124 @@ const CtSearchIndex* CtMainWin::search_index() const
     return _uSearchIndex.get();
 }
 
+gint64 CtMainWin::semantic_index_pending() const
+{
+    return _uSearchIndex ? _uSearchIndex->count_pending_chunks() : 0;
+}
+
+void CtMainWin::semantic_index_kick()
+{
+    if (not _uSearchIndex or not _pCtConfig->semanticIndexEnabled) return;
+    CtAiService* pService = ai_service();
+    if (not pService or not pService->is_embedding_configured()) return;
+    if (_semanticBusy) return;
+    if (not _semanticDispatcherConnected) {
+        _semanticDispatcher.connect(sigc::mem_fun(*this, &CtMainWin::_semantic_on_done));
+        _semanticDispatcherConnected = true;
+    }
+    _semantic_start_batch();
+}
+
+void CtMainWin::_semantic_start_batch()
+{
+    if (_semanticBusy or not _uSearchIndex) return;
+    CtAiService* pService = ai_service();
+    // the vector space must match the configured model before anything is stored
+    if (_semanticConfigured and _uSearchIndex->semantic_model_name() != pService->embedding_model_id()) {
+        _semanticConfigured = false;
+    }
+    std::vector<CtChunk> batch;
+    if (_semanticConfigured) {
+        batch = _uSearchIndex->pending_chunks(8);
+        if (batch.empty()) {
+            if (_pSearchPanel) _pSearchPanel->refresh();
+            return; // nothing to do
+        }
+    }
+    // not configured yet: the first batch is only a warm up that tells us the dimension
+    if (_semanticWorker.joinable()) _semanticWorker.join();
+    _semanticBusy = true;
+    {
+        std::lock_guard<std::mutex> lock{_semanticMutex};
+        _semanticBatch = std::move(batch);
+        _semanticVectors.clear();
+        _semanticOk = false;
+        _semanticError.clear();
+        _semanticDim = 0;
+    }
+    std::vector<std::string> texts;
+    for (const CtChunk& c : _semanticBatch) texts.push_back(c.text.raw());
+    _semanticWorker = std::thread([this, pService, texts](){
+        std::vector<std::vector<float>> vecs;
+        std::string error;
+        bool ok{true};
+        if (texts.empty()) {
+            // warm up: load the model to learn its dimension
+            std::vector<std::vector<float>> probe;
+            ok = pService->embed_texts({"warm up"}, probe, error);
+        }
+        else {
+            ok = pService->embed_texts(texts, vecs, error);
+        }
+        const int dim = pService->embedding_provider() ? pService->embedding_provider()->embedding_dim() : 0;
+        {
+            std::lock_guard<std::mutex> lock{_semanticMutex};
+            _semanticVectors = std::move(vecs);
+            _semanticOk = ok;
+            _semanticError = error;
+            _semanticDim = dim;
+        }
+        _semanticDispatcher.emit();
+    });
+}
+
+void CtMainWin::_semantic_on_done()
+{
+    std::vector<CtChunk> batch;
+    std::vector<std::vector<float>> vecs;
+    bool ok{false};
+    std::string error;
+    int dim{0};
+    {
+        std::lock_guard<std::mutex> lock{_semanticMutex};
+        batch.swap(_semanticBatch);
+        vecs.swap(_semanticVectors);
+        ok = _semanticOk;
+        error = _semanticError;
+        dim = _semanticDim;
+    }
+    if (_semanticWorker.joinable()) _semanticWorker.join();
+    _semanticBusy = false;
+    if (not _uSearchIndex) return;
+    if (not ok) {
+        spdlog::warn("semantic index: {}", error);
+        _ctStatusBar.update_status(str::format(_("Semantic index: %s"), error));
+        return; // stop until the next trigger
+    }
+    CtAiService* pService = ai_service();
+    if (not _semanticConfigured and dim > 0) {
+        _uSearchIndex->semantic_configure(pService->embedding_model_id(), dim);
+        _semanticConfigured = true;
+    }
+    if (batch.size() == vecs.size()) {
+        for (size_t i = 0; i < batch.size(); ++i) _uSearchIndex->store_embedding(batch[i].chunk_id, vecs[i]);
+    }
+    const gint64 remaining = _uSearchIndex->count_pending_chunks();
+    if (remaining > 0) {
+        _ctStatusBar.update_status(str::format(_("Semantic index: %s chunks remaining"), std::to_string(remaining)));
+        // continue on the next idle so that the UI stays responsive
+        Glib::signal_idle().connect_once([this](){ _semantic_start_batch(); }, Glib::PRIORITY_LOW);
+    }
+    else if (not batch.empty()) {
+        update_selected_node_statusbar_info();
+        if (_pSearchPanel) _pSearchPanel->refresh();
+    }
+    else {
+        // warm up done
+        _semantic_start_batch();
+    }
+}
+
 void CtMainWin::search_index_open_for_document()
 {
     search_index_close();
@@ -67,6 +185,9 @@ void CtMainWin::search_index_close()
 {
     _searchIndexDebounce.disconnect();
     _searchIndexIdle.disconnect();
+    if (_semanticWorker.joinable()) _semanticWorker.join();
+    _semanticBusy = false;
+    _semanticConfigured = false;
     _searchIndexQueue.clear();
     _searchIndexQueueTotal = 0;
     _uSearchIndex.reset();
@@ -173,6 +294,9 @@ bool CtMainWin::_search_index_idle_tick()
                                   treeIter.get_node_tags(),
                                   body,
                                   treeIter.get_node_modification_time());
+        if (_pCtConfig->semanticIndexEnabled) {
+            _uSearchIndex->replace_node_chunks(node_id, CtSearchIndex::make_chunks(treeIter.get_node_name(), body));
+        }
     }
     const size_t remaining = _searchIndexQueue.size();
     if (remaining > 0 and _searchIndexQueueTotal > 20) {
@@ -184,6 +308,7 @@ bool CtMainWin::_search_index_idle_tick()
         if (_searchIndexQueueTotal > 20) update_selected_node_statusbar_info();
         _searchIndexQueueTotal = 0;
         if (_pSearchPanel) _pSearchPanel->refresh();
+        semantic_index_kick();
         return false; // done
     }
     return true;

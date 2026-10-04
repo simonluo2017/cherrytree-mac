@@ -12,6 +12,7 @@
 #
 # tier: small | medium | large      min_memory_gb: unified memory needed to run comfortably
 # url: optional explicit download URL (e.g. a mirror); by default the Hugging Face "resolve" URL of repo/file
+# kind: generation (default) | embedding     embedding models: pooling (mean|last|cls), query_prefix, embedding_dim
 
 [qwen2.5-1.5b-instruct-q4_k_m]
 name=Qwen2.5 1.5B Instruct (Q4_K_M)
@@ -55,3 +56,38 @@ description=Best quality; complex questions, code and long notes.
 size_bytes=0
 sha256=
 
+[qwen3-embedding-0.6b-q8_0]
+name=Qwen3 Embedding 0.6B (Q8_0)
+tier=embedding
+kind=embedding
+publisher=Qwen (Alibaba Cloud)
+repo=Qwen/Qwen3-Embedding-0.6B-GGUF
+file=Qwen3-Embedding-0.6B-Q8_0.gguf
+license=Apache-2.0
+license_url=https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF/blob/main/LICENSE
+min_memory_gb=8
+context_train=32768
+embedding_dim=1024
+pooling=last
+query_prefix=Instruct: Given a search query, retrieve relevant passages from personal notes\nQuery:
+description=Recommended embedding model for the semantic search index: multilingual (Chinese and English), 1024 dimensions.
+size_bytes=0
+sha256=
+
+[nomic-embed-text-v1.5-q8_0]
+name=Nomic Embed Text v1.5 (Q8_0)
+tier=embedding
+kind=embedding
+publisher=Nomic AI
+repo=nomic-ai/nomic-embed-text-v1.5-GGUF
+file=nomic-embed-text-v1.5.Q8_0.gguf
+license=Apache-2.0
+license_url=https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF
+min_memory_gb=8
+context_train=8192
+embedding_dim=768
+pooling=mean
+query_prefix=search_query:
+description=Smaller and faster embedding model, English first; 768 dimensions.
+size_bytes=0
+sha256=

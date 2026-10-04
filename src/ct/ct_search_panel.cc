@@ -21,9 +21,13 @@
 
 #include "ct_search_panel.h"
 #include "ct_search_index.h"
+#include "ct_ai_service.h"
+#include "ct_config.h"
 #include "ct_main_win.h"
 #include "ct_treestore.h"
 #include "ct_misc_utils.h"
+#include <cmath>
+#include <algorithm>
 
 #if GTKMM_MAJOR_VERSION < 4
 
@@ -54,6 +58,15 @@ CtSearchPanel::CtSearchPanel(CtMainWin* pCtMainWin)
     _scopeCombo.append(_("Current Node and Subnodes"));
     _scopeCombo.append(_("Current Node"));
     _scopeCombo.set_active(0);
+    _modeCombo.append(_("Keyword"));
+    _modeCombo.append(_("Semantic"));
+    _modeCombo.append(_("Hybrid"));
+    _modeCombo.set_tooltip_text(_("Keyword: full text index. Semantic: meaning, needs an embedding model (Preferences → AI). Hybrid: both, merged."));
+    _modeCombo.set_hexpand(true);
+    _relatedButton.set_label(_("Related"));
+    _relatedButton.set_tooltip_text(_("Notes semantically related to the current node"));
+    _modeBox.pack_start(_modeCombo, true, true);
+    _modeBox.pack_start(_relatedButton, false, false);
 
     _rStore = Gtk::ListStore::create(_columns);
     _treeView.set_model(_rStore);
@@ -77,6 +90,7 @@ CtSearchPanel::CtSearchPanel(CtMainWin* pCtMainWin)
 
     pack_start(_topBox, false, false);
     pack_start(_scopeCombo, false, false);
+    pack_start(_modeBox, false, false);
     pack_start(_scrolled, true, true);
     pack_start(_statusLabel, false, false);
 
@@ -105,6 +119,9 @@ CtSearchPanel::CtSearchPanel(CtMainWin* pCtMainWin)
     }, false);
     _closeButton.signal_clicked().connect([this](){ _pCtMainWin->search_panel_show(false); });
     _scopeCombo.signal_changed().connect([this](){ _run_search(); });
+    _modeCombo.signal_changed().connect([this](){ _run_search(); });
+    _relatedButton.signal_clicked().connect([this](){ show_related_to_current_node(); });
+    _update_mode_availability();
     _treeView.signal_row_activated().connect(sigc::mem_fun(*this, &CtSearchPanel::_on_result_activated));
     _treeView.signal_key_press_event().connect([this](GdkEventKey* pEvent){
         if (GDK_KEY_Escape == pEvent->keyval) {
@@ -148,7 +165,129 @@ std::set<gint64> CtSearchPanel::_scope_node_ids() const
 
 void CtSearchPanel::refresh()
 {
+    _update_mode_availability();
     _run_search();
+}
+
+CtSearchPanel::Mode CtSearchPanel::_mode() const
+{
+    return static_cast<Mode>(std::max(0, _modeCombo.get_active_row_number()));
+}
+
+void CtSearchPanel::_update_mode_availability()
+{
+    const CtAiService* pService = _pCtMainWin->ai_service();
+    const bool semantic = pService and pService->is_embedding_configured() and _pCtMainWin->get_ct_config()->semanticIndexEnabled;
+    if (_modeCombo.get_active_row_number() < 0) _modeCombo.set_active(semantic ? 2 : 0);
+    if (not semantic and _modeCombo.get_active_row_number() != 0) _modeCombo.set_active(0);
+    _modeCombo.set_sensitive(semantic);
+    _relatedButton.set_sensitive(semantic);
+}
+
+/*static*/ Glib::ustring CtSearchPanel::_chunk_excerpt(const Glib::ustring& chunk_text)
+{
+    // the first line of a chunk is the node name prefix
+    const auto nl = chunk_text.find('\n');
+    Glib::ustring body = nl == Glib::ustring::npos ? chunk_text : chunk_text.substr(nl + 1);
+    Glib::ustring clean;
+    bool prev_space{false};
+    for (const gunichar ch : body) {
+        const bool space = ch == ' ' or ch == '\t' or ch == '\n' or ch == '\r';
+        if (space and prev_space) continue;
+        clean += space ? ' ' : ch;
+        prev_space = space;
+    }
+    if (clean.size() > 160) clean = clean.substr(0, 160) + "…";
+    return clean;
+}
+
+void CtSearchPanel::_show_hits(const std::vector<Hit>& hits, const Glib::ustring& query, const std::set<gint64>& scope_ids)
+{
+    _rStore->clear();
+    const bool scoped = not scope_ids.empty();
+    std::vector<Glib::ustring> terms = CtSearchIndex::query_terms(query);
+    if (terms.size() > 1) terms.insert(terms.begin(), str::join(terms, " "));
+    int shown{0};
+    for (const Hit& hit : hits) {
+        if (scoped and 0 == scope_ids.count(hit.node_id)) continue;
+        if (shown >= SEARCH_RESULTS_LIMIT) break;
+        Gtk::TreeModel::Row row = *_rStore->append();
+        Glib::ustring markup = "<b>" + str::xml_escape(hit.name) + "</b>";
+        Glib::ustring parent_path = hit.path;
+        const auto sep = parent_path.rfind(" / ");
+        parent_path = sep == Glib::ustring::npos ? Glib::ustring{} : parent_path.substr(0, sep);
+        if (not parent_path.empty()) {
+            markup += "  <span size='small' alpha='60%'>" + str::xml_escape(parent_path) + "</span>";
+        }
+        if (not hit.snippet.empty()) {
+            const Glib::ustring snippet_lower = hit.snippet.lowercase();
+            Glib::ustring highlighted;
+            Glib::ustring::size_type pos{0};
+            while (pos < hit.snippet.size()) {
+                Glib::ustring::size_type best = Glib::ustring::npos;
+                Glib::ustring::size_type best_len{0};
+                for (const Glib::ustring& term : terms) {
+                    if (term.empty()) continue;
+                    const auto found = snippet_lower.find(term.lowercase(), pos);
+                    if (found != Glib::ustring::npos and (best == Glib::ustring::npos or found < best)) {
+                        best = found;
+                        best_len = term.size();
+                    }
+                }
+                if (best == Glib::ustring::npos) {
+                    highlighted += str::xml_escape(hit.snippet.substr(pos));
+                    break;
+                }
+                highlighted += str::xml_escape(hit.snippet.substr(pos, best - pos));
+                highlighted += "<span background='#fff3a0' foreground='#000000'>" + str::xml_escape(hit.snippet.substr(best, best_len)) + "</span>";
+                pos = best + best_len;
+            }
+            markup += "\n<span size='small'>" + highlighted + "</span>";
+        }
+        row[_columns.markup] = markup;
+        row[_columns.node_id] = hit.node_id;
+        ++shown;
+    }
+    if (0 == shown) set_status(_("No matches"));
+    else set_status(str::format(_("%s matching nodes"), std::to_string(shown)));
+}
+
+void CtSearchPanel::show_related_to_current_node()
+{
+    _lastQuery.clear();
+    const CtSearchIndex* pIndex = _pCtMainWin->search_index();
+    CtTreeIter currIter = _pCtMainWin->curr_tree_iter();
+    if (not pIndex or not pIndex->is_open() or not currIter) return;
+    const gint64 curr_id = currIter.get_node_id();
+    const std::vector<float> vec = pIndex->node_vector(curr_id);
+    if (vec.empty()) {
+        _rStore->clear();
+        set_status(_("This node is not in the semantic index yet."));
+        return;
+    }
+    std::map<gint64, double> best;
+    for (const CtSemanticResult& r : pIndex->semantic_search(vec, 60)) {
+        if (r.node_id == curr_id) continue;
+        const auto it = best.find(r.node_id);
+        if (it == best.end() or r.distance < it->second) best[r.node_id] = r.distance;
+    }
+    std::vector<std::pair<double, gint64>> ordered;
+    for (const auto& [id, dist] : best) ordered.emplace_back(dist, id);
+    std::sort(ordered.begin(), ordered.end());
+    std::vector<Hit> hits;
+    for (const auto& [dist, id] : ordered) {
+        CtTreeIter iter = _pCtMainWin->get_tree_store().get_node_from_node_id(id);
+        if (not iter) continue;
+        Hit hit;
+        hit.node_id = id;
+        hit.name = iter.get_node_name();
+        hit.path = CtMiscUtil::get_node_hierarchical_name(iter, " / ", false/*for_filename*/);
+        hit.snippet = str::format(_("similarity %s%"), std::to_string(static_cast<int>(std::round((1.0 - dist) * 100.0))));
+        hits.push_back(std::move(hit));
+        if (hits.size() >= 12) break;
+    }
+    _show_hits(hits, "", {});
+    if (not hits.empty()) set_status(str::format(_("Notes related to '%s'"), currIter.get_node_name().raw()));
 }
 
 void CtSearchPanel::_run_search()
@@ -167,54 +306,71 @@ void CtSearchPanel::_run_search()
     }
     const std::set<gint64> scope_ids = _scope_node_ids();
     const bool scoped = not scope_ids.empty();
-    std::vector<CtSearchResult> results = pIndex->search(query, scoped ? SEARCH_RESULTS_LIMIT * 5 : SEARCH_RESULTS_LIMIT);
-    int shown{0};
-    for (const CtSearchResult& res : results) {
-        if (scoped and 0 == scope_ids.count(res.node_id)) continue;
-        if (shown >= SEARCH_RESULTS_LIMIT) break;
-        Gtk::TreeModel::Row row = *_rStore->append();
-        Glib::ustring markup = "<b>" + str::xml_escape(res.node_name) + "</b>";
-        // the path without the node itself
-        Glib::ustring parent_path = res.node_path;
-        const auto sep = parent_path.rfind(" / ");
-        parent_path = sep == Glib::ustring::npos ? Glib::ustring{} : parent_path.substr(0, sep);
-        if (not parent_path.empty()) {
-            markup += "  <span size='small' alpha='60%'>" + str::xml_escape(parent_path) + "</span>";
-        }
-        if (not res.snippet.empty()) {
-            // highlight the matched terms in the excerpt
-            Glib::ustring snippet = res.snippet;
-            Glib::ustring highlighted;
-            const Glib::ustring snippet_lower = snippet.lowercase();
-            std::vector<Glib::ustring> terms = CtSearchIndex::query_terms(query);
-            if (terms.size() > 1) terms.insert(terms.begin(), str::join(terms, " "));
-            Glib::ustring::size_type pos{0};
-            while (pos < snippet.size()) {
-                Glib::ustring::size_type best = Glib::ustring::npos;
-                Glib::ustring::size_type best_len{0};
-                for (const Glib::ustring& term : terms) {
-                    const auto found = snippet_lower.find(term.lowercase(), pos);
-                    if (found != Glib::ustring::npos and (best == Glib::ustring::npos or found < best)) {
-                        best = found;
-                        best_len = term.size();
-                    }
-                }
-                if (best == Glib::ustring::npos) {
-                    highlighted += str::xml_escape(snippet.substr(pos));
-                    break;
-                }
-                highlighted += str::xml_escape(snippet.substr(pos, best - pos));
-                highlighted += "<span background='#fff3a0' foreground='#000000'>" + str::xml_escape(snippet.substr(best, best_len)) + "</span>";
-                pos = best + best_len;
+    const int limit = scoped ? SEARCH_RESULTS_LIMIT * 5 : SEARCH_RESULTS_LIMIT;
+    const Mode mode = _mode();
+
+    std::vector<Hit> hits;
+    // keyword hits (also the base of hybrid)
+    std::vector<CtSearchResult> fts;
+    if (mode != Mode::Semantic) fts = pIndex->search(query, limit);
+    // semantic hits aggregated per node by the closest chunk
+    std::vector<std::pair<gint64, Glib::ustring>> sem_nodes; // ranked node id, best chunk excerpt
+    if (mode != Mode::Keyword) {
+        CtAiService* pService = _pCtMainWin->ai_service();
+        std::vector<float> qvec;
+        std::string error;
+        if (pService and pService->embed_query(query.raw(), qvec, error)) {
+            std::map<gint64, std::pair<double, Glib::ustring>> best;
+            for (const CtSemanticResult& r : pIndex->semantic_search(qvec, std::max(60, limit))) {
+                const auto it = best.find(r.node_id);
+                if (it == best.end() or r.distance < it->second.first) best[r.node_id] = {r.distance, r.text};
             }
-            markup += "\n<span size='small'>" + highlighted + "</span>";
+            std::vector<std::pair<double, gint64>> ordered;
+            for (const auto& [id, pair] : best) ordered.emplace_back(pair.first, id);
+            std::sort(ordered.begin(), ordered.end());
+            for (const auto& [dist, id] : ordered) sem_nodes.emplace_back(id, best[id].second);
         }
-        row[_columns.markup] = markup;
-        row[_columns.node_id] = res.node_id;
-        ++shown;
+        else if (not error.empty()) {
+            set_status(str::format(_("Semantic search unavailable: %s"), error));
+            if (mode == Mode::Semantic) return;
+        }
     }
-    if (0 == shown) set_status(_("No matches"));
-    else set_status(str::format(_("%s matching nodes"), std::to_string(shown)));
+    if (mode == Mode::Keyword or (mode == Mode::Hybrid and sem_nodes.empty())) {
+        for (const CtSearchResult& res : fts) {
+            hits.push_back(Hit{res.node_id, res.node_name, res.node_path, res.snippet, -res.rank});
+        }
+    }
+    else if (mode == Mode::Semantic) {
+        for (const auto& [id, chunk] : sem_nodes) {
+            CtTreeIter iter = _pCtMainWin->get_tree_store().get_node_from_node_id(id);
+            if (not iter) continue;
+            hits.push_back(Hit{id, iter.get_node_name(), CtMiscUtil::get_node_hierarchical_name(iter, " / ", false), _chunk_excerpt(chunk), 0.0});
+        }
+    }
+    else {
+        // hybrid: reciprocal rank fusion of the two rankings
+        std::map<gint64, Hit> merged;
+        const double k = 60.0;
+        for (size_t i = 0; i < fts.size(); ++i) {
+            Hit& h = merged[fts[i].node_id];
+            h.node_id = fts[i].node_id; h.name = fts[i].node_name; h.path = fts[i].node_path; h.snippet = fts[i].snippet;
+            h.score += 1.0 / (k + static_cast<double>(i + 1));
+        }
+        for (size_t i = 0; i < sem_nodes.size(); ++i) {
+            const gint64 id = sem_nodes[i].first;
+            Hit& h = merged[id];
+            if (h.node_id == 0) {
+                CtTreeIter iter = _pCtMainWin->get_tree_store().get_node_from_node_id(id);
+                if (not iter) { merged.erase(id); continue; }
+                h.node_id = id; h.name = iter.get_node_name(); h.path = CtMiscUtil::get_node_hierarchical_name(iter, " / ", false);
+                h.snippet = _chunk_excerpt(sem_nodes[i].second);
+            }
+            h.score += 1.0 / (k + static_cast<double>(i + 1));
+        }
+        for (auto& [id, h] : merged) hits.push_back(h);
+        std::sort(hits.begin(), hits.end(), [](const Hit& a, const Hit& b){ return a.score > b.score; });
+    }
+    _show_hits(hits, query, scope_ids);
 }
 
 void CtSearchPanel::_on_result_activated(const Gtk::TreeModel::Path& path, Gtk::TreeViewColumn*)
