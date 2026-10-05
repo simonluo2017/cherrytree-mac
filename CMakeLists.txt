@@ -240,6 +240,40 @@ if(USE_LLAMA_CPP)
   add_compile_definitions(HAVE_LLAMA_CPP)
 endif()
 
+# -- Apple Foundation Models bridge (src/apple/CtAppleFM.swift): a small Swift dylib with a C ABI,
+#    loaded at runtime by CtAiProviderApple; needs the macOS 26 SDK (Xcode 26) to compile, the
+#    application itself runs on older macOS without it (the provider reports "not available")
+if(APPLE)
+  option(USE_APPLE_FM "Build the Apple Foundation Models (Apple Intelligence) bridge" ON)
+endif()
+set(CT_APPLE_FM_BRIDGE OFF)
+if(APPLE AND USE_APPLE_FM)
+  include(CheckLanguage)
+  check_language(Swift)
+  if(CMAKE_Swift_COMPILER)
+    # the FoundationModels module is only in the macOS 26 SDK: probe it before enabling the target
+    file(WRITE ${CMAKE_BINARY_DIR}/applefm_probe.swift "import Foundation\n#if canImport(FoundationModels)\nimport FoundationModels\n#endif\n")
+    execute_process(COMMAND ${CMAKE_Swift_COMPILER} -typecheck ${CMAKE_BINARY_DIR}/applefm_probe.swift
+                    RESULT_VARIABLE APPLEFM_PROBE_RESULT OUTPUT_QUIET ERROR_VARIABLE APPLEFM_PROBE_ERROR)
+    if(APPLEFM_PROBE_RESULT EQUAL 0)
+      enable_language(Swift)
+      set(CT_APPLE_FM_BRIDGE ON)
+      message(STATUS "Apple Foundation Models bridge: enabled (${CMAKE_Swift_COMPILER})")
+    else()
+      message(STATUS "Apple Foundation Models bridge: disabled, the Swift compiler cannot use the FoundationModels SDK: ${APPLEFM_PROBE_ERROR}")
+    endif()
+  else()
+    message(STATUS "Apple Foundation Models bridge: disabled, no Swift compiler (install Xcode 26 or newer)")
+  endif()
+endif()
+if(CT_APPLE_FM_BRIDGE)
+  add_library(ct_applefm SHARED src/apple/CtAppleFM.swift)
+  set_target_properties(ct_applefm PROPERTIES OUTPUT_NAME ct_applefm Swift_LANGUAGE_VERSION 5)
+  # the framework only exists on macOS 26: weak link so that the dylib loads on older systems
+  target_link_options(ct_applefm PRIVATE "-Xlinker" "-weak_framework" "-Xlinker" "FoundationModels")
+  target_compile_options(ct_applefm PRIVATE -parse-as-library)
+endif()
+
 include(FindPackageHandleStandardArgs)
 
 # For both src and tests targets

@@ -23,6 +23,7 @@
 
 #include "ct_main_win.h"
 #include "ct_actions.h"
+#include "ct_graph_panel.h"
 #include "ct_list.h"
 
 void CtMainWin::_on_treeview_cursor_changed()
@@ -86,6 +87,7 @@ void CtMainWin::_on_treeview_cursor_changed()
         window_header_update_ghost_icon(treeIter.get_node_is_excluded_from_search() or treeIter.get_node_children_are_excluded_from_search());
         window_header_update_bookmark_icon(is_bookmarked);
         update_selected_node_statusbar_info();
+        if (_pGraphPanel and _pGraphPanel->get_visible()) _pGraphPanel->on_node_changed();
     }
 
     _ctStateMachine.node_selected_changed(nodeIdDataHolder);

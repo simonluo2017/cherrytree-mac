@@ -31,9 +31,33 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
 {
     auto vbox_model = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_VERTICAL, 4/*spacing*/});
     auto label_intro = Gtk::manage(new Gtk::Label{});
-    label_intro->set_markup(_("The AI runs <b>on this Mac only</b> (llama.cpp, Metal). Nothing is sent over the network.\nChoose a model in GGUF format; the selection or the current node is the only text the model sees."));
+    label_intro->set_markup(_("The AI runs <b>on this Mac only</b>: a GGUF model through llama.cpp (Metal), or the system model of Apple Intelligence (macOS 26). Nothing is sent over the network.\nThe selection, the current node or the retrieved excerpts are the only text the model sees."));
     label_intro->set_xalign(0.0);
     label_intro->set_line_wrap(true);
+
+    // backend: local GGUF file or Apple Foundation Models
+    auto hbox_backend = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 4/*spacing*/});
+    auto label_backend = Gtk::manage(new Gtk::Label{_("Backend")});
+    auto combo_backend = Gtk::manage(new Gtk::ComboBoxText{});
+    combo_backend->append("llama", _("Local model file (llama.cpp, GGUF)"));
+    combo_backend->append("apple", _("Apple Intelligence (Apple Foundation Models, macOS 26+)"));
+    combo_backend->set_active_id(_pConfig->aiBackend == "apple" ? "apple" : "llama");
+    auto label_backend_status = Gtk::manage(new Gtk::Label{});
+    label_backend_status->set_xalign(0.0);
+    label_backend_status->set_line_wrap(true);
+    label_backend_status->get_style_context()->add_class("dim-label");
+    auto f_update_backend_status = [this, label_backend_status](){
+        if (_pConfig->aiBackend == "apple") {
+            std::string reason;
+            const bool ok = CtAiService::apple_backend_available(reason);
+            label_backend_status->set_text(Glib::ustring{ok ? _("Apple Intelligence: available") : _("Apple Intelligence: not available")} + (ok ? "" : " · " + reason));
+        }
+        else {
+            label_backend_status->set_text(_("llama.cpp: embedding models (semantic search) always use llama.cpp."));
+        }
+    };
+    f_update_backend_status();
+    label_backend->set_xalign(0.0);
 
     auto hbox_model = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 4/*spacing*/});
     auto label_model = Gtk::manage(new Gtk::Label{_("Model File (GGUF)")});
@@ -55,17 +79,34 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     entry_embed->set_placeholder_text(_("used by the semantic search index; pick one in the catalog and press Use This Model"));
     auto check_semantic = Gtk::manage(new Gtk::CheckButton{_("Keep a Semantic Search Index of the Document (embeds the notes in the background)")});
     check_semantic->set_active(_pConfig->semanticIndexEnabled);
+    auto check_graph = Gtk::manage(new Gtk::CheckButton{_("Build a Knowledge Graph of the Document (the generation model reads the notes in the background and extracts entities and relations; Tools → AI → Knowledge Graph)")});
+    check_graph->set_active(_pConfig->knowledgeGraphEnabled);
+    for (Gtk::CheckButton* pCheck : {check_semantic, check_graph}) {
+        if (auto pLabel = dynamic_cast<Gtk::Label*>(pCheck->get_child())) { pLabel->set_line_wrap(true); pLabel->set_xalign(0.0); }
+    }
     hbox_embed->pack_start(*label_embed, false, false);
     hbox_embed->pack_start(*entry_embed, true, true);
     hbox_model->pack_start(*label_model, false, false);
     hbox_model->pack_start(*entry_model, true, true);
     hbox_model->pack_start(*button_browse, false, false);
+    hbox_backend->pack_start(*label_backend, false, false);
+    hbox_backend->pack_start(*combo_backend, true, true);
     vbox_model->pack_start(*label_intro, false, false);
+    vbox_model->pack_start(*hbox_backend, false, false);
+    vbox_model->pack_start(*label_backend_status, false, false);
     vbox_model->pack_start(*hbox_model, false, false);
     vbox_model->pack_start(*label_model_info, false, false);
     vbox_model->pack_start(*hbox_embed, false, false);
     vbox_model->pack_start(*check_semantic, false, false);
+    vbox_model->pack_start(*check_graph, false, false);
     vbox_model->pack_start(*button_unload, false, false);
+    check_graph->signal_toggled().connect([this, check_graph](){
+        _pConfig->knowledgeGraphEnabled = check_graph->get_active();
+        apply_for_each_window([](CtMainWin* win) {
+            if (win->get_ct_config()->knowledgeGraphEnabled) { win->search_index_enqueue_all(true/*force*/); win->graph_extract_resume(); }
+            else win->graph_extract_pause();
+        });
+    });
     entry_embed->signal_changed().connect([this, entry_embed](){
         _pConfig->aiEmbeddingModelPath = str::trim(entry_embed->get_text()).raw();
         apply_for_each_window([](CtMainWin* win) { if (win->ai_service()) { win->ai_service()->apply_settings(); win->semantic_index_kick(); } });
@@ -323,7 +364,10 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
 
     auto f_update_model_info = [this, label_model_info](){
         const std::string& path = _pConfig->aiModelPath;
-        if (path.empty()) {
+        if (_pConfig->aiBackend == "apple") {
+            label_model_info->set_text(_("The GGUF file is not used while Apple Intelligence is the backend."));
+        }
+        else if (path.empty()) {
             label_model_info->set_text(_("No model configured."));
         }
         else if (not fs::is_regular_file(path)) {
@@ -344,6 +388,12 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     entry_model->signal_changed().connect([this, entry_model, f_apply](){
         _pConfig->aiModelPath = str::trim(entry_model->get_text()).raw();
         f_apply();
+    });
+    combo_backend->signal_changed().connect([this, combo_backend, f_apply, f_update_backend_status](){
+        const Glib::ustring id = combo_backend->get_active_id();
+        _pConfig->aiBackend = id == "apple" ? "apple" : "llama";
+        f_apply();
+        f_update_backend_status();
     });
     button_browse->signal_clicked().connect([this, entry_model](){
         CtDialogs::CtFileSelectArgs args{};

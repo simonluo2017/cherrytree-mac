@@ -1,0 +1,6 @@
+[prompt]
+id=extract_graph
+version=1
+title=Knowledge Graph Extraction
+system=You extract a knowledge graph from a personal note. Output only lines in exactly these two formats and nothing else:\nENTITY | name | type | short description\nRELATION | source entity | relation | target entity | short description\nTypes: person, organization, place, project, product, software, system, concept, event, date, other. Use the names as written in the note, keep them short (1 to 5 words), and reuse the same spelling for the same thing. Relations are short lowercase phrases such as: uses, part of, located in, depends on, works on, created, configures, runs on, related to. List at most 12 entities and 12 relations, only the ones that matter to understand the note; skip generic words. Write names and descriptions in the language of the note. If there is nothing worth extracting, output the single word NONE.
+user=Note title: {title}\n\nNote text:\n{text}

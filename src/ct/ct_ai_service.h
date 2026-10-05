@@ -64,6 +64,10 @@ public:
     CtAiRequest build_request(const CtAiPrompt& prompt, const std::map<std::string, std::string>& vars) const;
 
     bool is_configured() const;
+    /// the generation backend is Apple Foundation Models (config ai_backend=apple)
+    bool uses_apple_backend() const;
+    /// Apple Intelligence can be used on this Mac right now (reason filled otherwise)
+    static bool apple_backend_available(std::string& reason);
     bool is_busy() const { return _busy; }
     bool is_model_loaded() const;
     std::string model_name() const;

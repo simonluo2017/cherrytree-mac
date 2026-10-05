@@ -26,6 +26,9 @@
 #ifdef HAVE_LLAMA_CPP
 #include "ct_ai_provider_llama.h"
 #endif
+#ifdef HAVE_APPLE_FM
+#include "ct_ai_provider_apple.h"
+#endif
 
 CtAiService::CtAiService(CtConfig* pCtConfig)
  : _pCtConfig{pCtConfig}
@@ -106,7 +109,24 @@ CtAiRequest CtAiService::build_request(const CtAiPrompt& prompt, const std::map<
 
 bool CtAiService::is_configured() const
 {
-    return _uProvider and not _pCtConfig->aiModelPath.empty();
+    if (not _uProvider) return false;
+    if (uses_apple_backend()) return true; // availability is checked when loading
+    return not _pCtConfig->aiModelPath.empty();
+}
+
+bool CtAiService::uses_apple_backend() const
+{
+    return _pCtConfig->aiBackend == "apple";
+}
+
+/*static*/ bool CtAiService::apple_backend_available(std::string& reason)
+{
+#ifdef HAVE_APPLE_FM
+    return 0 == CtAiProviderApple::availability(reason);
+#else
+    reason = "Apple Foundation Models are only available in the macOS build";
+    return false;
+#endif
 }
 
 bool CtAiService::is_model_loaded() const
@@ -124,13 +144,20 @@ void CtAiService::apply_settings()
 {
     if (not _busy) {
         _uProvider.reset();
-#ifdef HAVE_LLAMA_CPP
-        CtAiProviderLlama::Settings settings;
-        settings.model_path = _pCtConfig->aiModelPath;
-        settings.n_ctx = _pCtConfig->aiContextSize;
-        settings.n_threads = _pCtConfig->aiThreads;
-        _uProvider = std::make_unique<CtAiProviderLlama>(settings);
+        if (uses_apple_backend()) {
+#ifdef HAVE_APPLE_FM
+            _uProvider = std::make_unique<CtAiProviderApple>();
 #endif
+        }
+        else {
+#ifdef HAVE_LLAMA_CPP
+            CtAiProviderLlama::Settings settings;
+            settings.model_path = _pCtConfig->aiModelPath;
+            settings.n_ctx = _pCtConfig->aiContextSize;
+            settings.n_threads = _pCtConfig->aiThreads;
+            _uProvider = std::make_unique<CtAiProviderLlama>(settings);
+#endif
+        }
     }
     {
         std::lock_guard<std::mutex> lock{_embeddingMutex};

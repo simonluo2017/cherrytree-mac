@@ -51,6 +51,8 @@ void register_exe_path_detect_if_portable(const char* exe_path);
 bool app_bundle_setup_env();
 // the "share" directory of a self contained application bundle, empty when not bundled
 path get_app_bundle_share_dir();
+// the running executable (canonical), empty before register_exe_path_detect_if_portable
+path get_executable_path();
 
 bool alter_locale_env_var(const std::string& key, const std::string& val);
 

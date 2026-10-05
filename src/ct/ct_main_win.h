@@ -102,6 +102,7 @@ class CtStorageControl;
 #include "ct_ai_service.h"
 class CtSearchPanel;
 class CtAiPanel;
+class CtGraphPanel;
 
 class CtMainWin : public Gtk::ApplicationWindow
 {
@@ -186,6 +187,20 @@ public:
     gint64 semantic_index_pending() const;
     void search_panel_show(const bool show);
     bool search_panel_visible() const;
+
+    // knowledge graph: background extraction of entities/relations with the generation model (ct_main_win_graph.cc)
+    /// (re)start the extraction of the pending chunks if enabled, configured and idle
+    void graph_extract_kick();
+    /// stop the running extraction (it resumes on the next kick); returns once the model is free
+    void graph_extract_pause();
+    /// clear the pause and kick
+    void graph_extract_resume();
+    bool graph_extract_running() const { return _graphExtracting; }
+    /// drop the graph and extract everything again
+    void graph_rebuild();
+    CtGraphPanel* graph_panel() { return _pGraphPanel; }
+    void graph_panel_show(const bool show);
+    bool graph_panel_visible() const;
 
     // local AI (ct_main_win_search.cc)
     CtAiService* ai_service() { if (not _uAiService) _uAiService = std::make_unique<CtAiService>(_pCtConfig); return _uAiService.get(); }
@@ -444,6 +459,18 @@ private:
     std::string                  _semanticError;
     void _semantic_on_done();
     void _semantic_start_batch();
+    // knowledge graph extraction: one chunk per generation, on the AI service worker
+    CtGraphPanel*                _pGraphPanel{nullptr};
+    bool                         _graphExtracting{false};
+    bool                         _graphPaused{false};
+    gint64                       _graphChunkId{0};
+    gint64                       _graphNodeId{0};
+    std::string                  _graphOutput;
+    int                          _graphFailures{0};
+    sigc::connection             _graphRetryTimer;
+    void _graph_extract_next();
+    void _graph_on_done(const bool ok, const std::string& error);
+    void _graph_update_status();
     void _search_index_start_idle();
     bool _search_index_idle_tick();
     Gtk::Box                     _hBoxVte{Gtk::ORIENTATION_HORIZONTAL};

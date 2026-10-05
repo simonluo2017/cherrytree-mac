@@ -23,6 +23,7 @@
 #include "ct_search_index.h"
 #include "ct_search_panel.h"
 #include "ct_ai_panel.h"
+#include "ct_graph_panel.h"
 #include "ct_export2txt.h"
 #include "ct_storage_control.h"
 #include "ct_misc_utils.h"
@@ -150,6 +151,7 @@ void CtMainWin::_semantic_on_done()
     else if (not batch.empty()) {
         update_selected_node_statusbar_info();
         if (_pSearchPanel) _pSearchPanel->refresh();
+        graph_extract_kick();
     }
     else {
         // warm up done
@@ -185,6 +187,8 @@ void CtMainWin::search_index_close()
 {
     _searchIndexDebounce.disconnect();
     _searchIndexIdle.disconnect();
+    graph_extract_pause();
+    _graphPaused = false;
     if (_semanticWorker.joinable()) _semanticWorker.join();
     _semanticBusy = false;
     _semanticConfigured = false;
@@ -294,7 +298,7 @@ bool CtMainWin::_search_index_idle_tick()
                                   treeIter.get_node_tags(),
                                   body,
                                   treeIter.get_node_modification_time());
-        if (_pCtConfig->semanticIndexEnabled) {
+        if (_pCtConfig->semanticIndexEnabled or _pCtConfig->knowledgeGraphEnabled) {
             _uSearchIndex->replace_node_chunks(node_id, CtSearchIndex::make_chunks(treeIter.get_node_name(), body));
         }
     }
@@ -309,6 +313,7 @@ bool CtMainWin::_search_index_idle_tick()
         _searchIndexQueueTotal = 0;
         if (_pSearchPanel) _pSearchPanel->refresh();
         semantic_index_kick();
+        graph_extract_kick();
         return false; // done
     }
     return true;
@@ -323,7 +328,8 @@ void CtMainWin::search_panel_show(const bool show)
     }
     _pSearchPanel->set_visible(show);
     if (show) {
-        if (_pAiPanel) _pAiPanel->set_visible(false); // the two panels share the side area
+        if (_pAiPanel) _pAiPanel->set_visible(false); // the panels share the side area
+        if (_pGraphPanel) _pGraphPanel->set_visible(false);
         _pSearchPanel->refresh();
         _pSearchPanel->focus_entry();
     }
@@ -353,6 +359,7 @@ void CtMainWin::ai_panel_show(const bool show)
     _pAiPanel->set_visible(show);
     if (show) {
         if (_pSearchPanel) _pSearchPanel->set_visible(false);
+        if (_pGraphPanel) _pGraphPanel->set_visible(false);
     }
     else {
         _ctTextview.mm().grab_focus();

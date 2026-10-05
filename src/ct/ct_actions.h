@@ -98,7 +98,7 @@ public: // todo: fix naming
     void          _ai_run_prompt(const std::string& prompt_id, const std::map<std::string, std::string>& vars, const Glib::ustring& title);
     struct AiExcerpt { gint64 node_id{0}; gint64 chunk_id{0}; Glib::ustring path; Glib::ustring text; double score{0.0}; };
     /// hybrid retrieval of the excerpts most relevant to a question (keyword chunks + semantic chunks, RRF)
-    std::vector<AiExcerpt> _ai_retrieve_excerpts(const Glib::ustring& question, const int max_excerpts, const size_t max_chars);
+    std::vector<AiExcerpt> _ai_retrieve_excerpts(const Glib::ustring& question, const int max_excerpts, const size_t max_chars, std::string* pGraphFacts = nullptr);
     void          _ai_text_action(const std::string& prompt_id, const Glib::ustring& title);
     bool          _is_curr_node_not_syntax_highlighting_or_error(bool plain_text_ok = false);
     bool          _is_there_text_selection_or_error();
@@ -307,6 +307,7 @@ public:
     void ai_ask_notebook();
     void ai_ask_notebook_question(const Glib::ustring& question);
     void ai_toggle_panel();
+    void ai_toggle_graph_panel();
     void ai_insert_text_in_node(const Glib::ustring& text);
     void ai_new_subnode_with_text(const Glib::ustring& name, const Glib::ustring& text);
     void toggle_show_hide_menubar();

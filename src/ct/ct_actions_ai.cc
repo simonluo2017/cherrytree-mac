@@ -67,9 +67,11 @@ bool CtActions::_ai_ready_or_error()
         return false;
     }
     if (not pService->is_configured()) {
-        CtDialogs::info_dialog(_("No AI model is configured yet.\n\nChoose a GGUF model file in Preferences → AI (Local Model)."), *_pCtMainWin);
+        CtDialogs::info_dialog(_("No AI model is configured yet.\n\nChoose a GGUF model file in Preferences → AI (Local Model), or Apple Intelligence on macOS 26."), *_pCtMainWin);
         return false;
     }
+    // the background graph extraction yields to the user
+    if (pService->is_busy() and _pCtMainWin->graph_extract_running()) _pCtMainWin->graph_extract_pause();
     if (pService->is_busy()) {
         CtDialogs::info_dialog(_("The AI is still answering the previous request. Stop it first or wait for it to finish."), *_pCtMainWin);
         return false;
@@ -91,12 +93,21 @@ void CtActions::_ai_run_prompt(const std::string& prompt_id, const std::map<std:
     pPanel->begin(title);
     if (not pService->is_model_loaded()) pPanel->set_status(_("Loading the model…"));
     const CtAiRequest request = pService->build_request(*pPrompt, vars);
+    CtMainWin* pMainWin = _pCtMainWin;
     const bool started = pService->run(request,
         [pPanel](const std::string& piece){ pPanel->append(piece); },
-        [pPanel](const bool ok, const std::string& error){ pPanel->finish(ok, error); });
+        [pPanel, pMainWin](const bool ok, const std::string& error){
+            pPanel->finish(ok, error);
+            pMainWin->graph_extract_resume(); // the background extraction continues after the user's request
+        });
     if (not started) {
         pPanel->finish(false, _("The AI is busy."));
     }
+}
+
+void CtActions::ai_toggle_graph_panel()
+{
+    _pCtMainWin->graph_panel_show(not _pCtMainWin->graph_panel_visible());
 }
 
 void CtActions::_ai_text_action(const std::string& prompt_id, const Glib::ustring& title)
@@ -172,9 +183,10 @@ void CtActions::ai_new_subnode_with_text(const Glib::ustring& name, const Glib::
 
 // ---- Ask Notebook (RAG over the search index)
 
-std::vector<CtActions::AiExcerpt> CtActions::_ai_retrieve_excerpts(const Glib::ustring& question, const int max_excerpts, const size_t max_chars)
+std::vector<CtActions::AiExcerpt> CtActions::_ai_retrieve_excerpts(const Glib::ustring& question, const int max_excerpts, const size_t max_chars, std::string* pGraphFacts)
 {
     std::vector<AiExcerpt> out;
+    if (pGraphFacts) pGraphFacts->clear();
     const CtSearchIndex* pIndex = _pCtMainWin->search_index();
     if (not pIndex or not pIndex->is_open()) return out;
     CtAiService* pService = _pCtMainWin->ai_service();
@@ -221,6 +233,38 @@ std::vector<CtActions::AiExcerpt> CtActions::_ai_retrieve_excerpts(const Glib::u
         if (pService->embed_query(question.raw(), qvec, error)) semantic = pIndex->semantic_search(qvec, 20);
         else spdlog::warn("ask notebook: {}", error);
     }
+    // knowledge graph side: the chunks mentioning the entities named in the question (and their neighbours)
+    std::vector<CtChunk> graph_ranked;
+    if (pIndex->graph_count_entities() > 0) {
+        const std::vector<CtGraphEntity> matched = pIndex->graph_match_entities(question, 8);
+        std::map<gint64, double> weights;
+        std::string facts;
+        int fact_lines{0};
+        for (const CtGraphEntity& e : matched) {
+            weights[e.entity_id] = 2.0;
+            if (not e.description.empty() and fact_lines < 14) {
+                facts += "- " + e.name.raw() + " (" + e.type.raw() + "): " + e.description.raw() + "\n";
+                ++fact_lines;
+            }
+        }
+        for (const CtGraphEntity& e : matched) {
+            for (const CtGraphRelation& r : pIndex->graph_relations_of(e.entity_id)) {
+                const gint64 other = r.source_id == e.entity_id ? r.target_id : r.source_id;
+                if (0 == weights.count(other)) weights[other] = 1.0; // one hop
+                if (fact_lines < 14) {
+                    facts += "- " + r.source_name.raw() + " → " + r.type.raw() + " → " + r.target_name.raw();
+                    if (not r.description.empty()) facts += " (" + r.description.raw() + ")";
+                    facts += "\n";
+                    ++fact_lines;
+                }
+            }
+        }
+        for (const auto& [chunk_id, score] : pIndex->graph_chunks_of_entities(weights, 20)) {
+            CtChunk c;
+            if (pIndex->chunk(chunk_id, c)) graph_ranked.push_back(c);
+        }
+        if (pGraphFacts and not facts.empty()) *pGraphFacts = facts;
+    }
     // reciprocal rank fusion at chunk level
     std::map<gint64, AiExcerpt> merged;
     const double k = 60.0;
@@ -232,6 +276,11 @@ std::vector<CtActions::AiExcerpt> CtActions::_ai_retrieve_excerpts(const Glib::u
     for (size_t i = 0; i < semantic.size(); ++i) {
         AiExcerpt& e = merged[semantic[i].chunk_id];
         e.node_id = semantic[i].node_id; e.chunk_id = semantic[i].chunk_id; e.text = semantic[i].text;
+        e.score += 1.0 / (k + static_cast<double>(i + 1));
+    }
+    for (size_t i = 0; i < graph_ranked.size(); ++i) {
+        AiExcerpt& e = merged[graph_ranked[i].chunk_id];
+        e.node_id = graph_ranked[i].node_id; e.chunk_id = graph_ranked[i].chunk_id; e.text = graph_ranked[i].text;
         e.score += 1.0 / (k + static_cast<double>(i + 1));
     }
     for (auto& [id, e] : merged) out.push_back(e);
@@ -280,7 +329,8 @@ void CtActions::ai_ask_notebook_question(const Glib::ustring& question)
     }
     const int free_tokens = std::max(200, ctx_tokens - _pCtConfig->aiMaxTokens - 350);
     const size_t budget_chars = static_cast<size_t>(std::min(9000, std::max(600, free_tokens * 2)));
-    const std::vector<AiExcerpt> excerpts = _ai_retrieve_excerpts(question, 6, budget_chars);
+    std::string facts;
+    const std::vector<AiExcerpt> excerpts = _ai_retrieve_excerpts(question, 6, budget_chars, &facts);
     if (excerpts.empty()) {
         _pCtMainWin->ai_panel_show(true);
         _pCtMainWin->ai_panel()->begin(question);
@@ -295,6 +345,10 @@ void CtActions::ai_ask_notebook_question(const Glib::ustring& question)
         context += "[" + std::to_string(n) + "] " + e.path.raw() + "\n" + e.text.raw() + "\n\n";
         sources.push_back(CtAiPanel::Source{n, e.node_id, e.path, e.text});
     }
-    _ai_run_prompt("qa_notebook", {{"context", context}, {"question", question.raw()}}, question);
+    std::string facts_block;
+    if (not facts.empty() and facts.size() < budget_chars / 3) {
+        facts_block = std::string{_("Facts from the knowledge graph of the notebook (derived automatically, may be imperfect):")} + "\n" + facts + "\n";
+    }
+    _ai_run_prompt("qa_notebook", {{"context", context}, {"facts", facts_block}, {"question", question.raw()}}, question);
     _pCtMainWin->ai_panel()->set_sources(sources);
 }

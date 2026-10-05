@@ -48,6 +48,40 @@ struct CtSemanticResult
     double        distance{0.0}; // cosine distance, lower is closer
 };
 
+// ---- knowledge graph (derived from the chunks by the local model, see ct_search_index_graph.cc)
+
+struct CtGraphEntity
+{
+    gint64        entity_id{0};
+    Glib::ustring name;
+    Glib::ustring type;        // person, organization, place, project, product, software, system, concept, event, date, other
+    Glib::ustring description;
+    int           mentions{0}; // number of chunks mentioning it
+};
+
+struct CtGraphRelation
+{
+    gint64        relation_id{0};
+    gint64        source_id{0};
+    gint64        target_id{0};
+    Glib::ustring source_name;
+    Glib::ustring target_name;
+    Glib::ustring type;        // "uses", "part of", ...
+    Glib::ustring description;
+    gint64        node_id{0};  // provenance
+    gint64        chunk_id{0};
+};
+
+/// what the model extracted from one chunk
+struct CtGraphExtraction
+{
+    struct Entity { Glib::ustring name, type, description; };
+    struct Relation { Glib::ustring source, target, type, description; };
+    std::vector<Entity>   entities;
+    std::vector<Relation> relations;
+    bool empty() const { return entities.empty() and relations.empty(); }
+};
+
 struct CtSearchResult
 {
     gint64        node_id{0};
@@ -113,6 +147,7 @@ public:
     std::vector<CtChunk> pending_chunks(const int limit) const;
     /// all chunks of a node in order
     std::vector<CtChunk> chunks_of_node(const gint64 node_id) const;
+    bool chunk(const gint64 chunk_id, CtChunk& out) const;
     gint64 count_pending_chunks() const;
     gint64 count_embedded_chunks() const;
     bool store_embedding(const gint64 chunk_id, const std::vector<float>& vec);
@@ -122,6 +157,39 @@ public:
     std::vector<float> node_vector(const gint64 node_id) const;
     /// register the sqlite-vec extension for every connection (idempotent)
     static void register_vec_extension();
+
+    // ---- knowledge graph (entities, relations, mentions; provenance = chunk and node)
+    /// parse the line based output of the extraction prompt (ENTITY | ... / RELATION | ... lines)
+    static CtGraphExtraction parse_extraction(const Glib::ustring& model_output);
+    /// canonical form of an entity name used to merge duplicates (case, spaces, quotes)
+    static std::string normalize_entity_name(const Glib::ustring& name);
+    /// store what was extracted from a chunk (replaces the previous extraction of that chunk) and mark it extracted
+    bool graph_store_extraction(const gint64 chunk_id, const gint64 node_id, const CtGraphExtraction& extraction);
+    /// mark a chunk as extracted without a result (nothing in it / the model failed)
+    bool graph_mark_extracted(const gint64 chunk_id);
+    /// chunks that still need extraction
+    std::vector<CtChunk> graph_pending_chunks(const int limit) const;
+    gint64 graph_count_pending() const;
+    gint64 graph_count_extracted() const;
+    gint64 graph_count_entities() const;
+    gint64 graph_count_relations() const;
+    /// drop the whole graph and mark every chunk as not extracted
+    bool graph_clear();
+    /// the model that built the graph (informational)
+    std::string graph_model_name() const;
+    bool graph_set_model_name(const std::string& name);
+    /// entities by number of mentions; filter = substring of the name (case insensitive), empty = all
+    std::vector<CtGraphEntity> graph_entities(const Glib::ustring& filter, const int limit) const;
+    std::vector<CtGraphEntity> graph_entities_of_node(const gint64 node_id) const;
+    bool graph_entity(const gint64 entity_id, CtGraphEntity& out) const;
+    /// relations where the entity is source or target
+    std::vector<CtGraphRelation> graph_relations_of(const gint64 entity_id) const;
+    /// nodes mentioning an entity with the number of chunks mentioning it there
+    std::vector<std::pair<gint64, int>> graph_nodes_of_entity(const gint64 entity_id) const;
+    /// entities whose name occurs in a text (used to link a question to the graph)
+    std::vector<CtGraphEntity> graph_match_entities(const Glib::ustring& text, const int limit) const;
+    /// chunks mentioning the entities, best first (score = sum of the weights of the entities mentioned)
+    std::vector<std::pair<gint64, double>> graph_chunks_of_entities(const std::map<gint64, double>& entity_weights, const int limit) const;
 
     // helpers, public for the tests
     static std::vector<Glib::ustring> query_terms(const Glib::ustring& user_query);
@@ -136,6 +204,12 @@ private:
     bool _set_meta(const std::string& key, const std::string& value);
     std::string _get_meta(const std::string& key) const;
     bool _ensure_vec_table(const int dim);
+    bool _graph_create_schema(std::string* pError);
+    /// forget the extraction of a chunk (mentions, relations); entities without mentions are pruned by _graph_prune
+    void _graph_forget_chunk(const gint64 chunk_id);
+    void _graph_prune();
+    gint64 _graph_entity_id(const Glib::ustring& name, const Glib::ustring& type, const Glib::ustring& description);
+    gint64 _count(const char* sql) const;
 
     sqlite3* _pDb{nullptr};
     fs::path _path;

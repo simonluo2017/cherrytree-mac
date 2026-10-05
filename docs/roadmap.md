@@ -22,10 +22,10 @@
 | §27 Ask This Node / Summarize / Explain / Tasks / Tags | ✅ 完成 | Tools → AI (Local Model)，右侧 AI 面板，提示词在 `data/prompts` |
 | §32 Model Manager（应用内一键下载，SHA256 校验） | ✅ 完成 | `data/models.manifest` 目录，断点续传，SHA256（目录固定或发布方 LFS 哈希），`scripts/update_model_manifest.py` 固定哈希；manifest 签名尚未做 |
 | §4 Split View | ⬜ 未开始 | 伴随 Document / View 拆分 |
-| §8 Apple Foundation Models 桥接 | ⬜ 未开始 | 独立 Swift PoC，不阻塞主线 |
+| §8 Apple Foundation Models 桥接 | ✅ 完成（待在 macOS 26 + Xcode 26 上验证） | `src/apple/CtAppleFM.swift` → `libct_applefm.dylib`（C ABI），`CtAiProviderApple` 运行时 dlopen，Preferences → AI → Backend 切换；无 Xcode 26 时自动跳过 |
 | §20 Embedding + sqlite-vec | ✅ 完成 | 分块 + sqlite-vec 向量表，后台增量嵌入，Keyword / Semantic / Hybrid（RRF）检索，Related Notes |
 | §28 Ask Notebook / RAG | ✅ 完成 | 混合检索（关键词块 + 语义块，RRF）→ 上下文预算 → 生成，回答带 [n] 引用，Sources 可点击跳转 |
-| §22 Knowledge Graph | ⬜ 未开始 | 第二版再做 |
+| §22–§25 Knowledge Graph（第二版） | ✅ 完成 | SQLite `entities/relations/entity_mentions`（带来源块/节点），本地模型按块后台提取（`extract_graph.prompt`），图谱面板（Ctrl+Alt+G：实体列表 / 邻域图 / 关系 / 提及节点），Ask Notebook 检索加图谱块 + 图谱事实；派生索引可随时 Rebuild，不改笔记 |
 | §6 Plugin API | ⬜ 未开始 | |
 
 供应链原则：第三方 C/C++ 依赖（llama.cpp、sqlite-vec）以源码形式 vendor 进仓库并锁定 commit；打包脚本不联网；模型文件由应用内 Model Manager 从 manifest 列出的官方来源下载，下载前展示来源与许可证，下载后校验 SHA256。

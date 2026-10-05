@@ -287,6 +287,7 @@ const char* CtMenu::_get_ui_str_menu()
       <menuitem action='ai_extract_tasks'/>
       <menuitem action='ai_generate_tags'/>
       <separator/>
+      <menuitem action='ai_graph_panel'/>
       <menuitem action='ai_toggle_panel'/>
     </menu>
     <separator/>

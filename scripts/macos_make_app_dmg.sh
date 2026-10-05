@@ -64,6 +64,14 @@ if [ -d "$OUT_DIR" ]; then
 fi
 mkdir -p "$MACOS" "$RES/share/cherrytree" "$FRAMEWORKS"
 cp build/cherrytree "$MACOS/cherrytree"
+# Apple Foundation Models bridge (built from src/apple/CtAppleFM.swift when Xcode 26 is installed);
+# loaded at runtime from Contents/Frameworks, the app runs without it on older systems
+if [ -f build/libct_applefm.dylib ]; then
+  cp build/libct_applefm.dylib "$FRAMEWORKS/"
+  echo "== Apple Foundation Models bridge bundled"
+else
+  echo "== no Apple Foundation Models bridge (build/libct_applefm.dylib not built: needs Xcode 26 / macOS 26 SDK)"
+fi
 
 # -- CherryTree data (same layout as 'cmake --install': share/cherrytree, share/locale)
 cp -R language-specs styles "$RES/share/cherrytree/"

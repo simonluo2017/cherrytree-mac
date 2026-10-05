@@ -140,6 +140,11 @@ const char* get_latex_dvipng_console_bin_prefix()
     return latex_dvipng_console_bin_prefix;
 }
 
+path get_executable_path()
+{
+    return _exePath;
+}
+
 void register_exe_path_detect_if_portable(const char* exe_path)
 {
     _exePath = fs::canonical(exe_path);

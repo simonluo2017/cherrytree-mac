@@ -112,13 +112,15 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 | --- | --- |
 | Ask This Node…（Ctrl+Alt+A / ⌘⌥A） | 打开 AI 面板，就当前节点提问 |
 | Summarize / Explain / Extract Tasks / Suggest Tags | 作用于选中文本；没有选中时作用于整个当前节点 |
+| Ask Notebook…（Ctrl+Alt+N / ⌘⌥N） | 对整个文档提问（RAG，见下） |
+| Knowledge Graph（Ctrl+Alt+G / ⌘⌥G） | 开关知识图谱面板（见下） |
 | Show/Hide Panel | 开关右侧 AI 面板 |
 
 - 输出流式显示在右侧 AI 面板（与检索面板共用位置），可随时 Stop。
 - 面板底部三个按钮：Copy、Insert into Node（追加到当前节点末尾）、New Subnode（以回答建子节点）。AI 不会自动修改任何笔记。
 - 模型只看到选中文本或当前节点的纯文本，加上提示词；不会上传整个文档。
 - 提示词在 `data/prompts/*.prompt`（KeyFile 格式，带 id/version），在 `~/.config/cherrytree/prompts/` 放同名文件即可覆盖。
-- 架构：`CtAiProvider` 接口 → `CtAiProviderLlama`（llama.cpp）；`CtAiService` 负责后台线程、流式回调、取消、空闲卸载。Apple Foundation Models / MLX / 云端以后作为新的 Provider 接入，业务层不改。
+- 架构：`CtAiProvider` 接口 → `CtAiProviderLlama`（llama.cpp）/ `CtAiProviderApple`（Apple Foundation Models，见下）；`CtAiService` 负责后台线程、流式回调、取消、空闲卸载。MLX / 云端以后作为新的 Provider 接入，业务层不改。
 - 构建开关：CMake `-DUSE_LLAMA_CPP=OFF` 可去掉整个 AI 模块。
 
 ### Ask Notebook（RAG，整个文档问答）
@@ -129,6 +131,25 @@ Tools → AI (Local Model) → **Ask Notebook…**（Ctrl+Alt+N / ⌘⌥N），�
 - 回答里用 `[1]`、`[2]` 引用摘录；面板上方列出 **Sources**，点击跳到对应节点并选中摘录开头，鼠标悬停可看摘录全文。
 - 没有嵌入模型时只用关键词检索；语义索引关闭时直接取节点正文开头。
 - 模型只看到检索出的摘录和问题，不会上传整个文档。
+- 知识图谱建好后，检索还会多一路"图谱块"（问题里提到的实体及其一跳邻居所在的块），一起参与 RRF；并把这些实体的关系（最多 14 条，如 `Ceph RGW → located in → Tokyo`）作为 "Facts from the knowledge graph" 附在提示词里。
+
+### Knowledge Graph（知识图谱，第二版）
+
+Tools → AI (Local Model) → **Knowledge Graph**（Ctrl+Alt+G / ⌘⌥G）打开右侧图谱面板；Preferences → AI 里勾选 "Build a Knowledge Graph…" 让它在后台持续构建（默认关闭，因为要花生成模型的算力）。
+
+- **数据**：与检索索引同一个 `<文档>.ai-index.sqlite`，三张表 `entities`（名称、规范化名、类型、描述）、`relations`（源实体、关系、目标实体、描述、来源节点和块）、`entity_mentions`（实体 ↔ 节点 ↔ 块）。每条关系和提及都带来源（provenance）；它是派生索引，可随时 Rebuild 或删掉索引文件重建，**从不修改笔记**。
+- **提取**：按块（chunk，与语义索引共用）交给生成模型，提示词 `data/prompts/extract_graph.prompt` 要求只输出 `ENTITY | 名称 | 类型 | 描述` 和 `RELATION | 源 | 关系 | 目标 | 描述` 两种行（类型：person / organization / place / project / product / software / system / concept / event / date / other），解析器容忍列表符号、代码围栏、中文"实体/关系"、全角竖线等；同名实体（忽略大小写和多余空白）自动合并。
+- **调度**：在全文索引和语义索引之后、程序空闲时一块一块跑（每块一次生成，temperature 0.1，最多 700 token）；用户发起 Ask / Summarize 时后台提取立即让路，回答结束后自动继续。节点内容改动后只重新提取变化的块，旧块的实体和关系随之删除，没有任何提及的实体被清理。状态栏显示 "Knowledge graph: N chunks to read"。
+- **面板**：上半部分是实体列表（按提及次数排序，按类型着色，可过滤，"This node" 只看当前节点的实体），下半部分画出选中实体的邻域（中心是它，周围一圈是有关系的实体，边上写关系名，点击邻居即切换过去），再往下是关系明细和 "Mentioned in" 节点列表，点节点跳转并选中实体名。按钮：Build（开启并开始/继续）、Pause、Rebuild（清空重来）。
+- 生成模型可以是 llama.cpp 的 GGUF，也可以是 Apple Intelligence；小模型（1.5B）的抽取质量一般，3B/7B 明显更好。
+
+## Apple Intelligence（Apple Foundation Models 桥接）
+
+Preferences → AI (Local Model) → **Backend** 选 "Apple Intelligence (Apple Foundation Models, macOS 26+)"，之后 Ask / Summarize / Ask Notebook / 图谱提取都走系统自带的本地模型，不需要下载 GGUF（语义检索的嵌入模型仍然用 llama.cpp，Apple 没有公开嵌入接口）。
+
+- 实现：`src/apple/CtAppleFM.swift` 编译成 `libct_applefm.dylib`，通过 `@_cdecl` 导出 4 个 C 函数（`ct_applefm.h`：版本、可用性、上下文大小、流式生成，带取消回调）；C++ 侧 `CtAiProviderApple` 在运行时 `dlopen` 它（先找 `Contents/Frameworks/`，再找可执行文件旁边，或环境变量 `CT_APPLEFM_LIB`），所以同一个 app 在没有 Apple Intelligence 的 Mac 上照常运行，只是该后端显示 "not available" 和原因（系统太旧 / 机型不支持 / 系统设置里没开 / 模型还在下载）。
+- 构建：CMake 检测到 Swift 编译器且 SDK 含 `FoundationModels`（Xcode 26 / macOS 26 SDK）时自动编译桥接库（`-DUSE_APPLE_FM=OFF` 关闭），框架用 weak link，打包脚本把 dylib 复制进 `Contents/Frameworks` 并一起 ad-hoc 签名；没有 Xcode 26 时跳过，不影响其余功能。
+- 限制：系统模型上下文 4096 token（Ask Notebook 的摘录预算会自动按它收缩），有内容安全护栏（被拒绝时面板显示原因），所有推理在本机，和 llama.cpp 后端一样不联网。
 
 ## 编辑器外观：CherryTree / TextMate
 

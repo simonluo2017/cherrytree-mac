@@ -127,6 +127,10 @@ public:
     std::string                                 aiEmbeddingPooling;      // "" (model default) | mean | last | cls
     std::string                                 aiEmbeddingQueryPrefix;  // instruction prepended to queries (e.g. Qwen3-Embedding)
     bool                                        semanticIndexEnabled{true};
+    // knowledge graph: entities and relations extracted from the chunks by the generation model (background)
+    bool                                        knowledgeGraphEnabled{false};
+    // generation backend: "llama" (GGUF file via llama.cpp) | "apple" (Apple Foundation Models, macOS 26+)
+    std::string                                 aiBackend{"llama"};
     int                                         maxMatchesInPage{500};
     int                                         toolbarIconSize{1};
     int                                         multipleWordsSearchType{0}; // 0: exact match, 1: disregard order (AND), 2: match any (OR)

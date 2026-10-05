@@ -34,35 +34,9 @@ extern "C" int sqlite3_vec_init(sqlite3* db, char** pzErrMsg, const sqlite3_api_
 
 const char* CtSearchIndex::INDEX_FILE_SUFFIX{".ai-index.sqlite"};
 
-namespace {
-
-// RAII prepared statement
-class Stmt
-{
-public:
-    Stmt(sqlite3* pDb, const char* sql) {
-        if (sqlite3_prepare_v2(pDb, sql, -1, &_pStmt, nullptr) != SQLITE_OK) {
-            spdlog::error("search index: sqlite3_prepare_v2 '{}': {}", sql, sqlite3_errmsg(pDb));
-            _pStmt = nullptr;
-        }
-    }
-    ~Stmt() { if (_pStmt) sqlite3_finalize(_pStmt); }
-    operator bool() const { return nullptr != _pStmt; }
-    sqlite3_stmt* get() { return _pStmt; }
-    void bind_text(const int idx, const Glib::ustring& text) {
-        sqlite3_bind_text(_pStmt, idx, text.c_str(), static_cast<int>(text.bytes()), SQLITE_TRANSIENT);
-    }
-private:
-    sqlite3_stmt* _pStmt{nullptr};
-};
-
-Glib::ustring column_text(sqlite3_stmt* pStmt, const int col)
-{
-    const unsigned char* pText = sqlite3_column_text(pStmt, col);
-    return pText ? Glib::ustring{reinterpret_cast<const char*>(pText)} : Glib::ustring{};
-}
-
-} // namespace
+#include "ct_sqlite_stmt.h"
+using CtSqlite::Stmt;
+using CtSqlite::column_text;
 
 CtSearchIndex::~CtSearchIndex()
 {
@@ -140,14 +114,22 @@ bool CtSearchIndex::open(const fs::path& index_path, std::string* pError)
         "CREATE TABLE IF NOT EXISTS chunks("
         "  chunk_id INTEGER PRIMARY KEY, node_id INTEGER NOT NULL, seq INTEGER NOT NULL,"
         "  start_offset INTEGER NOT NULL DEFAULT 0, text TEXT NOT NULL, text_hash TEXT NOT NULL,"
-        "  embedded INTEGER NOT NULL DEFAULT 0);"
+        "  embedded INTEGER NOT NULL DEFAULT 0, extracted INTEGER NOT NULL DEFAULT 0);"
         "CREATE INDEX IF NOT EXISTS chunks_node ON chunks(node_id);"
         "CREATE INDEX IF NOT EXISTS chunks_embedded ON chunks(embedded);";
-    if (not _exec(schema, pError)) {
+    if (not _exec(schema, pError) or not _graph_create_schema(pError)) {
         close();
         return false;
     }
     return true;
+}
+
+gint64 CtSearchIndex::_count(const char* sql) const
+{
+    if (not _pDb) return 0;
+    Stmt stmt{_pDb, sql};
+    if (stmt and stmt.step_row()) return sqlite3_column_int64(stmt.get(), 0);
+    return 0;
 }
 
 bool CtSearchIndex::_set_meta(const std::string& key, const std::string& value)
@@ -293,6 +275,7 @@ bool CtSearchIndex::replace_node_chunks(const gint64 node_id, const std::vector<
     }
     // drop the chunks that are gone (and their vectors)
     const bool has_vec = semantic_dim() > 0;
+    bool forgot{false};
     for (const gint64 chunk_id : all_existing) {
         if (keep.count(chunk_id)) continue;
         Stmt del{_pDb, "DELETE FROM chunks WHERE chunk_id=?"};
@@ -301,7 +284,10 @@ bool CtSearchIndex::replace_node_chunks(const gint64 node_id, const std::vector<
             Stmt delv{_pDb, "DELETE FROM vec_chunks WHERE chunk_id=?"};
             if (delv) { sqlite3_bind_int64(delv.get(), 1, chunk_id); sqlite3_step(delv.get()); }
         }
+        _graph_forget_chunk(chunk_id);
+        forgot = true;
     }
+    if (forgot) _graph_prune();
     _exec("COMMIT");
     return true;
 }
@@ -312,6 +298,15 @@ bool CtSearchIndex::remove_node_chunks(const gint64 node_id)
     if (semantic_dim() > 0) {
         Stmt stmt{_pDb, "DELETE FROM vec_chunks WHERE chunk_id IN (SELECT chunk_id FROM chunks WHERE node_id=?)"};
         if (stmt) { sqlite3_bind_int64(stmt.get(), 1, node_id); sqlite3_step(stmt.get()); }
+    }
+    {
+        Stmt stmt{_pDb, "SELECT chunk_id FROM chunks WHERE node_id=?"};
+        bool forgot{false};
+        if (stmt) {
+            stmt.bind_int64(1, node_id);
+            while (stmt.step_row()) { _graph_forget_chunk(sqlite3_column_int64(stmt.get(), 0)); forgot = true; }
+        }
+        if (forgot) _graph_prune();
     }
     Stmt stmt{_pDb, "DELETE FROM chunks WHERE node_id=?"};
     if (not stmt) return false;
@@ -355,6 +350,21 @@ std::vector<CtChunk> CtSearchIndex::chunks_of_node(const gint64 node_id) const
         ret.push_back(std::move(c));
     }
     return ret;
+}
+
+bool CtSearchIndex::chunk(const gint64 chunk_id, CtChunk& out) const
+{
+    if (not _pDb) return false;
+    Stmt stmt{_pDb, "SELECT chunk_id, node_id, seq, start_offset, text FROM chunks WHERE chunk_id=?"};
+    if (not stmt) return false;
+    stmt.bind_int64(1, chunk_id);
+    if (not stmt.step_row()) return false;
+    out.chunk_id = sqlite3_column_int64(stmt.get(), 0);
+    out.node_id = sqlite3_column_int64(stmt.get(), 1);
+    out.seq = sqlite3_column_int(stmt.get(), 2);
+    out.start_offset = sqlite3_column_int(stmt.get(), 3);
+    out.text = column_text(stmt.get(), 4);
+    return true;
 }
 
 gint64 CtSearchIndex::count_pending_chunks() const
@@ -492,6 +502,7 @@ bool CtSearchIndex::clear()
     if (not _pDb) return false;
     _exec("DROP TABLE IF EXISTS vec_chunks");
     _exec("DELETE FROM chunks");
+    graph_clear();
     const int dim = semantic_dim();
     if (dim > 0) _ensure_vec_table(dim);
     return _exec("DELETE FROM nodes_fts");

@@ -79,7 +79,10 @@ set(CT_SHARED_FILES
   ct_parser_md.cc
   ct_parser_remarkup.cc
   ct_search_index.cc
+  ct_search_index_graph.cc
   ct_search_panel.cc
+  ct_graph_panel.cc
+  ct_main_win_graph.cc
   ct_main_win_search.cc
   ct_ai_service.cc
   ct_ai_models.cc
@@ -96,6 +99,14 @@ add_library(cherrytree_shared STATIC ${CT_SHARED_FILES})
 if(USE_LLAMA_CPP)
   target_sources(cherrytree_shared PRIVATE ct_ai_provider_llama.cc)
   target_link_libraries(cherrytree_shared llama)
+endif()
+if(APPLE)
+  # the provider is always built on macOS: it loads libct_applefm.dylib at runtime when present
+  target_sources(cherrytree_shared PRIVATE ct_ai_provider_apple.cc)
+  target_compile_definitions(cherrytree_shared PUBLIC HAVE_APPLE_FM)
+  if(CT_APPLE_FM_BRIDGE)
+    add_dependencies(cherrytree_shared ct_applefm)
+  endif()
 endif()
 # sqlite-vec (vendored, see third_party/sqlite-vec/VENDOR.md): vector search inside the search index database
 add_library(sqlite_vec STATIC ${CMAKE_SOURCE_DIR}/third_party/sqlite-vec/sqlite-vec.c)
