@@ -101,6 +101,9 @@ if(USE_LLAMA_CPP)
   target_link_libraries(cherrytree_shared llama)
 endif()
 if(APPLE)
+  # Cocoa integration (Quit Apple event -> CherryTree quit flow), Objective-C++
+  target_sources(cherrytree_shared PRIVATE ct_macos_app.mm)
+  target_link_libraries(cherrytree_shared "-framework Cocoa")
   # the provider is always built on macOS: it loads libct_applefm.dylib at runtime when present
   target_sources(cherrytree_shared PRIVATE ct_ai_provider_apple.cc)
   target_compile_definitions(cherrytree_shared PUBLIC HAVE_APPLE_FM)

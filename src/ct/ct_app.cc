@@ -31,6 +31,9 @@
 #include "ct_storage_control.h"
 #include "config.h"
 #include "ct_logging.h"
+#ifdef __APPLE__
+#include "ct_macos_app.h"
+#endif
 #include <iostream>
 
 namespace {
@@ -216,6 +219,12 @@ void CtApp::_on_startup()
             spdlog::warn("Could not create config dir {}", config_dir.c_str());
         }
     }
+
+#ifdef __APPLE__
+    // Dock > Quit, logout and shutdown reach the process as an Apple event that would end in
+    // exit() right away: route them through the same flow as CherryTree > Quit (save prompts)
+    ct_macos_install_quit_handler([this](){ close_all_windows(false/*fromKillCallback*/); });
+#endif
 
     const fs::path user_dir_icons = config_dir / "icons";
 #if GTKMM_MAJOR_VERSION >= 4
