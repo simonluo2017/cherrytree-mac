@@ -29,6 +29,8 @@
 #include "ct_treestore.h"
 #include "ct_misc_utils.h"
 #include "ct_logging.h"
+#include "ct_search_index.h"
+#include <algorithm>
 
 // the selection if any, otherwise the plain text of the whole node
 Glib::ustring CtActions::_ai_source_text(bool& is_selection)
@@ -166,4 +168,133 @@ void CtActions::ai_new_subnode_with_text(const Glib::ustring& name, const Glib::
     if (newIter) {
         _pCtMainWin->get_tree_view().set_cursor_safe(newIter);
     }
+}
+
+// ---- Ask Notebook (RAG over the search index)
+
+std::vector<CtActions::AiExcerpt> CtActions::_ai_retrieve_excerpts(const Glib::ustring& question, const int max_excerpts, const size_t max_chars)
+{
+    std::vector<AiExcerpt> out;
+    const CtSearchIndex* pIndex = _pCtMainWin->search_index();
+    if (not pIndex or not pIndex->is_open()) return out;
+    CtAiService* pService = _pCtMainWin->ai_service();
+    auto strip_name_line = [](const Glib::ustring& chunk)->Glib::ustring{
+        const auto nl = chunk.find('\n');
+        return nl == Glib::ustring::npos ? chunk : chunk.substr(nl + 1);
+    };
+    auto node_path = [this](const gint64 node_id)->Glib::ustring{
+        CtTreeIter iter = _pCtMainWin->get_tree_store().get_node_from_node_id(node_id);
+        return iter ? Glib::ustring{CtMiscUtil::get_node_hierarchical_name(iter, " / ", false/*for_filename*/)} : Glib::ustring{};
+    };
+    // keyword side: the chunks of the best FTS nodes that contain the most query terms
+    std::vector<Glib::ustring> terms;
+    for (const Glib::ustring& t : CtSearchIndex::query_terms(question)) if (t.size() >= 2) terms.push_back(t.lowercase());
+    std::vector<std::pair<gint64, CtChunk>> keyword_ranked; // chunk id, chunk
+    for (const CtSearchResult& res : pIndex->search(question, 12)) {
+        const CtChunk* pBest{nullptr};
+        int best_hits{-1};
+        std::vector<CtChunk> chunks = pIndex->chunks_of_node(res.node_id);
+        for (const CtChunk& c : chunks) {
+            const Glib::ustring lower = c.text.lowercase();
+            int hits{0};
+            for (const Glib::ustring& t : terms) if (lower.find(t) != Glib::ustring::npos) ++hits;
+            if (hits > best_hits) { best_hits = hits; pBest = &c; }
+        }
+        if (pBest) keyword_ranked.emplace_back(pBest->chunk_id, *pBest);
+        else if (chunks.empty()) {
+            // no chunks (semantic index off): use the beginning of the node text
+            CtTreeIter iter = _pCtMainWin->get_tree_store().get_node_from_node_id(res.node_id);
+            if (not iter) continue;
+            try {
+                CtExportOptions options; options.include_node_name = false;
+                CtChunk c; c.node_id = res.node_id; c.chunk_id = -res.node_id;
+                c.text = iter.get_node_name() + "\n" + CtExport2Txt{_pCtMainWin}.node_export_to_txt(iter, fs::path{}, options, -1, -1).substr(0, 1500);
+                keyword_ranked.emplace_back(c.chunk_id, c);
+            } catch (std::exception&) {}
+        }
+    }
+    // semantic side
+    std::vector<CtSemanticResult> semantic;
+    if (pService and pService->is_embedding_configured() and _pCtConfig->semanticIndexEnabled) {
+        std::vector<float> qvec;
+        std::string error;
+        if (pService->embed_query(question.raw(), qvec, error)) semantic = pIndex->semantic_search(qvec, 20);
+        else spdlog::warn("ask notebook: {}", error);
+    }
+    // reciprocal rank fusion at chunk level
+    std::map<gint64, AiExcerpt> merged;
+    const double k = 60.0;
+    for (size_t i = 0; i < keyword_ranked.size(); ++i) {
+        AiExcerpt& e = merged[keyword_ranked[i].first];
+        e.node_id = keyword_ranked[i].second.node_id; e.chunk_id = keyword_ranked[i].first; e.text = keyword_ranked[i].second.text;
+        e.score += 1.0 / (k + static_cast<double>(i + 1));
+    }
+    for (size_t i = 0; i < semantic.size(); ++i) {
+        AiExcerpt& e = merged[semantic[i].chunk_id];
+        e.node_id = semantic[i].node_id; e.chunk_id = semantic[i].chunk_id; e.text = semantic[i].text;
+        e.score += 1.0 / (k + static_cast<double>(i + 1));
+    }
+    for (auto& [id, e] : merged) out.push_back(e);
+    std::sort(out.begin(), out.end(), [](const AiExcerpt& a, const AiExcerpt& b){ return a.score > b.score; });
+    // at most two excerpts per node, within the character budget
+    std::vector<AiExcerpt> chosen;
+    std::map<gint64, int> per_node;
+    size_t used{0};
+    for (AiExcerpt& e : out) {
+        if (static_cast<int>(chosen.size()) >= max_excerpts) break;
+        if (per_node[e.node_id] >= 2) continue;
+        Glib::ustring body = strip_name_line(e.text);
+        const size_t per_excerpt = std::min<size_t>(1800, std::max<size_t>(300, max_chars / 2));
+        if (body.size() > per_excerpt) body = body.substr(0, per_excerpt) + "…";
+        if (used + body.size() > max_chars and not chosen.empty()) continue;
+        e.text = body;
+        e.path = node_path(e.node_id);
+        if (e.path.empty()) continue;
+        used += body.size();
+        ++per_node[e.node_id];
+        chosen.push_back(e);
+    }
+    return chosen;
+}
+
+void CtActions::ai_ask_notebook()
+{
+    if (not _ai_ready_or_error()) return;
+    _pCtMainWin->ai_panel_show(true);
+    _pCtMainWin->ai_panel()->set_ask_scope(1);
+    _pCtMainWin->ai_panel()->focus_question();
+}
+
+void CtActions::ai_ask_notebook_question(const Glib::ustring& question)
+{
+    if (not _ai_ready_or_error()) return;
+    const CtSearchIndex* pIndex = _pCtMainWin->search_index();
+    if (not pIndex or not pIndex->is_open()) {
+        CtDialogs::info_dialog(_("Ask Notebook needs the search index: save the document first."), *_pCtMainWin);
+        return;
+    }
+    // the excerpts must fit in the model context together with the answer: ~2.5 chars per token
+    int ctx_tokens = _pCtConfig->aiContextSize;
+    if (const CtAiProvider* pProvider = _pCtMainWin->ai_service()->provider()) {
+        if (pProvider->is_loaded()) ctx_tokens = std::min(ctx_tokens, pProvider->capabilities().context_size);
+    }
+    const int free_tokens = std::max(200, ctx_tokens - _pCtConfig->aiMaxTokens - 350);
+    const size_t budget_chars = static_cast<size_t>(std::min(9000, std::max(600, free_tokens * 2)));
+    const std::vector<AiExcerpt> excerpts = _ai_retrieve_excerpts(question, 6, budget_chars);
+    if (excerpts.empty()) {
+        _pCtMainWin->ai_panel_show(true);
+        _pCtMainWin->ai_panel()->begin(question);
+        _pCtMainWin->ai_panel()->finish(false, _("Nothing in the notebook matches the question (try other words, or wait for the index to finish)."));
+        return;
+    }
+    std::string context;
+    std::vector<CtAiPanel::Source> sources;
+    int n{0};
+    for (const AiExcerpt& e : excerpts) {
+        ++n;
+        context += "[" + std::to_string(n) + "] " + e.path.raw() + "\n" + e.text.raw() + "\n\n";
+        sources.push_back(CtAiPanel::Source{n, e.node_id, e.path, e.text});
+    }
+    _ai_run_prompt("qa_notebook", {{"context", context}, {"question", question.raw()}}, question);
+    _pCtMainWin->ai_panel()->set_sources(sources);
 }

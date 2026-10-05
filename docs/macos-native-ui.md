@@ -121,6 +121,15 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 - 架构：`CtAiProvider` 接口 → `CtAiProviderLlama`（llama.cpp）；`CtAiService` 负责后台线程、流式回调、取消、空闲卸载。Apple Foundation Models / MLX / 云端以后作为新的 Provider 接入，业务层不改。
 - 构建开关：CMake `-DUSE_LLAMA_CPP=OFF` 可去掉整个 AI 模块。
 
+### Ask Notebook（RAG，整个文档问答）
+
+Tools → AI (Local Model) → **Ask Notebook…**（Ctrl+Alt+N / ⌘⌥N），或在 AI 面板里把范围从 "This Node" 切到 "Notebook"。
+
+- 流程：问题 → 检索（FTS 最匹配的节点里命中查询词最多的块 + 语义最近的块，RRF 融合）→ 最多 6 段摘录、每个节点最多 2 段、总长度按模型上下文预算（上下文 − 回答长度 − 350 token，约 2 字符/token）→ 拼进 `qa_notebook` 提示词 → 流式生成。
+- 回答里用 `[1]`、`[2]` 引用摘录；面板上方列出 **Sources**，点击跳到对应节点并选中摘录开头，鼠标悬停可看摘录全文。
+- 没有嵌入模型时只用关键词检索；语义索引关闭时直接取节点正文开头。
+- 模型只看到检索出的摘录和问题，不会上传整个文档。
+
 ## 编辑器外观：CherryTree / TextMate
 
 Preferences → Interface → Appearance → **Editor Look** 单选：

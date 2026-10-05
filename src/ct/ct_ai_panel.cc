@@ -25,6 +25,8 @@
 #include "ct_main_win.h"
 #include "ct_actions.h"
 #include "ct_misc_utils.h"
+#include "ct_treestore.h"
+#include <algorithm>
 
 #if GTKMM_MAJOR_VERSION < 4
 
@@ -52,11 +54,17 @@ CtAiPanel::CtAiPanel(CtMainWin* pCtMainWin)
     _topBox.pack_start(_stopButton, false, false);
     _topBox.pack_start(_closeButton, false, false);
 
-    _questionEntry.set_placeholder_text(_("Ask a question about this node…"));
+    _scopeCombo.append(_("This Node"));
+    _scopeCombo.append(_("Notebook"));
+    _scopeCombo.set_active(0);
+    _scopeCombo.set_tooltip_text(_("This Node: the model only sees the current node. Notebook: the most relevant excerpts of the whole document are retrieved first (search index), the answer cites them."));
+    _questionEntry.set_placeholder_text(_("Ask a question…"));
     _questionEntry.set_hexpand(true);
     _askButton.set_label(_("Ask"));
+    _askBox.pack_start(_scopeCombo, false, false);
     _askBox.pack_start(_questionEntry, true, true);
     _askBox.pack_start(_askButton, false, false);
+    _sourcesBox.set_no_show_all(true);
 
     _output.set_editable(false);
     _output.set_cursor_visible(false);
@@ -82,6 +90,7 @@ CtAiPanel::CtAiPanel(CtMainWin* pCtMainWin)
 
     pack_start(_topBox, false, false);
     pack_start(_askBox, false, false);
+    pack_start(_sourcesBox, false, false);
     pack_start(_scrolled, true, true);
     pack_start(_actionBox, false, false);
     pack_start(_statusLabel, false, false);
@@ -116,6 +125,7 @@ void CtAiPanel::begin(const Glib::ustring& title)
 {
     _titleLabel.set_markup("<b>" + str::xml_escape(title) + "</b>");
     _output.get_buffer()->set_text("");
+    set_sources({});
     _running = true;
     set_status(_("Thinking…"));
     _update_buttons();
@@ -164,7 +174,64 @@ void CtAiPanel::_on_ask()
 {
     const Glib::ustring question = str::trim(_questionEntry.get_text());
     if (question.empty()) return;
-    _pCtMainWin->get_ct_actions()->ai_ask_node_question(question);
+    if (1 == get_ask_scope()) _pCtMainWin->get_ct_actions()->ai_ask_notebook_question(question);
+    else _pCtMainWin->get_ct_actions()->ai_ask_node_question(question);
+}
+
+void CtAiPanel::set_ask_scope(const int scope)
+{
+    _scopeCombo.set_active(scope);
+}
+
+int CtAiPanel::get_ask_scope() const
+{
+    return std::max(0, _scopeCombo.get_active_row_number());
+}
+
+void CtAiPanel::set_sources(const std::vector<Source>& sources)
+{
+    _sources = sources;
+    for (Gtk::Widget* pChild : _sourcesBox.get_children()) _sourcesBox.remove(*pChild);
+    if (_sources.empty()) {
+        _sourcesBox.hide();
+        return;
+    }
+    auto pTitle = Gtk::manage(new Gtk::Label{});
+    pTitle->set_markup("<small><b>" + Glib::ustring{_("Sources")} + "</b></small>");
+    pTitle->set_xalign(0.0);
+    _sourcesBox.pack_start(*pTitle, false, false);
+    for (const Source& source : _sources) {
+        auto pButton = Gtk::manage(new Gtk::Button{});
+        auto pLabel = Gtk::manage(new Gtk::Label{});
+        pLabel->set_markup("<small>[" + std::to_string(source.number) + "] " + str::xml_escape(source.label) + "</small>");
+        pLabel->set_xalign(0.0);
+        pLabel->set_ellipsize(Pango::ELLIPSIZE_END);
+        pButton->add(*pLabel);
+        pButton->set_relief(Gtk::RELIEF_NONE);
+        pButton->set_halign(Gtk::ALIGN_FILL);
+        pButton->set_tooltip_text(source.excerpt);
+        const gint64 node_id = source.node_id;
+        const Glib::ustring excerpt = source.excerpt;
+        pButton->signal_clicked().connect([this, node_id, excerpt](){
+            CtTreeIter treeIter = _pCtMainWin->get_tree_store().get_node_from_node_id(node_id);
+            if (not treeIter) { set_status(_("The source node does not exist anymore.")); return; }
+            _pCtMainWin->get_tree_view().set_cursor_safe(treeIter);
+            // select the first line of the excerpt in the node text
+            auto rBuffer = _pCtMainWin->get_text_view().get_buffer();
+            const auto nl = excerpt.find('\n');
+            Glib::ustring needle = str::trim(nl == Glib::ustring::npos ? excerpt : excerpt.substr(0, nl));
+            if (needle.size() > 60) needle = needle.substr(0, 60);
+            Gtk::TextIter match_start, match_end;
+            if (rBuffer and not needle.empty() and rBuffer->begin().forward_search(needle, Gtk::TEXT_SEARCH_CASE_INSENSITIVE, match_start, match_end)) {
+                rBuffer->select_range(match_start, match_end);
+                _pCtMainWin->get_text_view().mm().scroll_to(match_start, CtTextView::TEXT_SCROLL_MARGIN);
+            }
+        });
+        _sourcesBox.pack_start(*pButton, false, false);
+        pButton->show_all();
+    }
+    pTitle->show();
+    _sourcesBox.show();
 }
 
 void CtAiPanel::_on_stop()

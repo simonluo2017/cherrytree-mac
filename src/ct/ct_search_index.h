@@ -111,6 +111,8 @@ public:
     bool remove_node_chunks(const gint64 node_id);
     /// chunks that still need a vector
     std::vector<CtChunk> pending_chunks(const int limit) const;
+    /// all chunks of a node in order
+    std::vector<CtChunk> chunks_of_node(const gint64 node_id) const;
     gint64 count_pending_chunks() const;
     gint64 count_embedded_chunks() const;
     bool store_embedding(const gint64 chunk_id, const std::vector<float>& vec);

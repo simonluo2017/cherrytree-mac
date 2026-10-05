@@ -292,12 +292,15 @@ bool CtSearchIndex::replace_node_chunks(const gint64 node_id, const std::vector<
         ++seq;
     }
     // drop the chunks that are gone (and their vectors)
+    const bool has_vec = semantic_dim() > 0;
     for (const gint64 chunk_id : all_existing) {
         if (keep.count(chunk_id)) continue;
         Stmt del{_pDb, "DELETE FROM chunks WHERE chunk_id=?"};
         if (del) { sqlite3_bind_int64(del.get(), 1, chunk_id); sqlite3_step(del.get()); }
-        Stmt delv{_pDb, "DELETE FROM vec_chunks WHERE chunk_id=?"};
-        if (delv) { sqlite3_bind_int64(delv.get(), 1, chunk_id); sqlite3_step(delv.get()); }
+        if (has_vec) {
+            Stmt delv{_pDb, "DELETE FROM vec_chunks WHERE chunk_id=?"};
+            if (delv) { sqlite3_bind_int64(delv.get(), 1, chunk_id); sqlite3_step(delv.get()); }
+        }
     }
     _exec("COMMIT");
     return true;
@@ -306,7 +309,7 @@ bool CtSearchIndex::replace_node_chunks(const gint64 node_id, const std::vector<
 bool CtSearchIndex::remove_node_chunks(const gint64 node_id)
 {
     if (not _pDb) return false;
-    {
+    if (semantic_dim() > 0) {
         Stmt stmt{_pDb, "DELETE FROM vec_chunks WHERE chunk_id IN (SELECT chunk_id FROM chunks WHERE node_id=?)"};
         if (stmt) { sqlite3_bind_int64(stmt.get(), 1, node_id); sqlite3_step(stmt.get()); }
     }
@@ -323,6 +326,25 @@ std::vector<CtChunk> CtSearchIndex::pending_chunks(const int limit) const
     Stmt stmt{_pDb, "SELECT chunk_id, node_id, seq, start_offset, text FROM chunks WHERE embedded=0 ORDER BY chunk_id LIMIT ?"};
     if (not stmt) return ret;
     sqlite3_bind_int(stmt.get(), 1, limit);
+    while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
+        CtChunk c;
+        c.chunk_id = sqlite3_column_int64(stmt.get(), 0);
+        c.node_id = sqlite3_column_int64(stmt.get(), 1);
+        c.seq = sqlite3_column_int(stmt.get(), 2);
+        c.start_offset = sqlite3_column_int(stmt.get(), 3);
+        c.text = column_text(stmt.get(), 4);
+        ret.push_back(std::move(c));
+    }
+    return ret;
+}
+
+std::vector<CtChunk> CtSearchIndex::chunks_of_node(const gint64 node_id) const
+{
+    std::vector<CtChunk> ret;
+    if (not _pDb) return ret;
+    Stmt stmt{_pDb, "SELECT chunk_id, node_id, seq, start_offset, text FROM chunks WHERE node_id=? ORDER BY seq"};
+    if (not stmt) return ret;
+    sqlite3_bind_int64(stmt.get(), 1, node_id);
     while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
         CtChunk c;
         c.chunk_id = sqlite3_column_int64(stmt.get(), 0);

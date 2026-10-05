@@ -313,6 +313,8 @@ void CtMenu::init_actions(CtActions* pActions)
             _("Suggest Tags for the Current Node"), sigc::mem_fun(*pActions, &CtActions::ai_generate_tags)});
         _actions.push_back(CtMenuAction{tools_cat, "ai_ask_node", "ct_execute", _("AI: _Ask This Node..."), KB_CONTROL+KB_ALT+"a",
             _("Ask a Question About the Current Node to the Local AI Model"), sigc::mem_fun(*pActions, &CtActions::ai_ask_node)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_ask_notebook", "ct_execute", _("AI: Ask _Notebook..."), KB_CONTROL+KB_ALT+"n",
+            _("Ask a Question About the Whole Document: the Relevant Notes are Retrieved First, the Answer Cites Them"), sigc::mem_fun(*pActions, &CtActions::ai_ask_notebook)});
         _actions.push_back(CtMenuAction{tools_cat, "ai_toggle_panel", "ct_execute", _("AI: Show/Hide _Panel"), None,
             _("Show/Hide the AI Panel"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_panel)});
         _actions.push_back(CtMenuAction{tools_cat, "spellcheck_toggle", "ct_spell-check", _("Enable/Disable _Spell Check"), KB_SHIFT+KB_ALT+"s",

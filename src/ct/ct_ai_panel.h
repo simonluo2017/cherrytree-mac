@@ -37,6 +37,12 @@ public:
     void finish(const bool ok, const Glib::ustring& error);
     void set_status(const Glib::ustring& text);
     void focus_question();
+    /// 0 = this node, 1 = whole notebook
+    void set_ask_scope(const int scope);
+    int get_ask_scope() const;
+    struct Source { int number{0}; gint64 node_id{0}; Glib::ustring label; Glib::ustring excerpt; };
+    /// the excerpts the answer may cite, shown as clickable sources (cleared by begin())
+    void set_sources(const std::vector<Source>& sources);
     Glib::ustring get_output_text() const;
 
 private:
@@ -53,8 +59,11 @@ private:
     Gtk::Button           _stopButton;
     Gtk::Button           _closeButton;
     Gtk::Box              _askBox{Gtk::ORIENTATION_HORIZONTAL, 4};
+    Gtk::ComboBoxText     _scopeCombo;
     Gtk::Entry            _questionEntry;
     Gtk::Button           _askButton;
+    Gtk::Box              _sourcesBox{Gtk::ORIENTATION_VERTICAL, 2};
+    std::vector<Source>   _sources;
     Gtk::ScrolledWindow   _scrolled;
     Gtk::TextView         _output;
     Gtk::Box              _actionBox{Gtk::ORIENTATION_HORIZONTAL, 4};

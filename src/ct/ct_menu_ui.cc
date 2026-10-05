@@ -281,6 +281,7 @@ const char* CtMenu::_get_ui_str_menu()
   <menu action='ToolsMenu'>
     <menu action='AiSubMenu'>
       <menuitem action='ai_ask_node'/>
+      <menuitem action='ai_ask_notebook'/>
       <menuitem action='ai_summarize'/>
       <menuitem action='ai_explain'/>
       <menuitem action='ai_extract_tasks'/>

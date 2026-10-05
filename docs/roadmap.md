@@ -24,7 +24,7 @@
 | §4 Split View | ⬜ 未开始 | 伴随 Document / View 拆分 |
 | §8 Apple Foundation Models 桥接 | ⬜ 未开始 | 独立 Swift PoC，不阻塞主线 |
 | §20 Embedding + sqlite-vec | ✅ 完成 | 分块 + sqlite-vec 向量表，后台增量嵌入，Keyword / Semantic / Hybrid（RRF）检索，Related Notes |
-| §28 Ask Notebook / RAG | ⬜ 未开始 | |
+| §28 Ask Notebook / RAG | ✅ 完成 | 混合检索（关键词块 + 语义块，RRF）→ 上下文预算 → 生成，回答带 [n] 引用，Sources 可点击跳转 |
 | §22 Knowledge Graph | ⬜ 未开始 | 第二版再做 |
 | §6 Plugin API | ⬜ 未开始 | |
 
