@@ -24,7 +24,10 @@
 
 #include <llama.h>
 #include <algorithm>
+#include <atomic>
 #include <cmath>
+#include <cstdlib>
+#include <set>
 #include <thread>
 
 namespace {
@@ -54,16 +57,50 @@ void ensure_backend()
     static BackendInit init;
 }
 
+// Providers that may hold a loaded model, unloaded at process exit: on macOS the Metal
+// backend of ggml keeps a static device registry whose destructor aborts when Metal
+// buffers (model weights, KV cache) are still alive (residency sets not empty). Quitting
+// through the Dock / Apple events ends in exit() without our destructors running, so the
+// models are released from an atexit handler registered after the first model load (it
+// therefore runs before the ggml statics are destroyed).
+std::mutex g_providersMutex;
+std::set<CtAiProviderLlama*> g_providers;
+std::atomic<bool> g_exiting{false};
+
+void unload_all_at_exit()
+{
+    g_exiting.store(true); // running generations stop at the next token
+    std::vector<CtAiProviderLlama*> providers;
+    {
+        std::lock_guard<std::mutex> lock{g_providersMutex};
+        providers.assign(g_providers.begin(), g_providers.end());
+    }
+    for (CtAiProviderLlama* pProvider : providers) pProvider->unload();
+    spdlog::info("llama: models released at exit ({} providers)", providers.size());
+}
+
+void register_exit_unload()
+{
+    static bool registered{false};
+    if (registered) return;
+    registered = true;
+    std::atexit(unload_all_at_exit);
+}
+
 } // namespace
 
 CtAiProviderLlama::CtAiProviderLlama(const Settings& settings)
  : _settings{settings}
 {
+    std::lock_guard<std::mutex> lock{g_providersMutex};
+    g_providers.insert(this);
 }
 
 CtAiProviderLlama::~CtAiProviderLlama()
 {
     unload();
+    std::lock_guard<std::mutex> lock{g_providersMutex};
+    g_providers.erase(this);
 }
 
 CtAiCapabilities CtAiProviderLlama::capabilities() const
@@ -143,6 +180,7 @@ bool CtAiProviderLlama::load(std::string& error)
         return false;
     }
     spdlog::info("llama: loaded {} (ctx {}, threads {})", _settings.model_path, cparams.n_ctx, n_threads);
+    register_exit_unload();
     return true;
 }
 
@@ -223,7 +261,7 @@ bool CtAiProviderLlama::generate(const CtAiRequest& request,
     // prompt processing in batches
     const int n_batch = static_cast<int>(llama_n_batch(_pCtx));
     for (int i = 0; i < n_prompt and ok; i += n_batch) {
-        if (cancel and cancel->load()) break;
+        if ((cancel and cancel->load()) or g_exiting.load()) break;
         const int n = std::min(n_batch, n_prompt - i);
         llama_batch batch = llama_batch_get_one(tokens.data() + i, n);
         if (llama_decode(_pCtx, batch) != 0) {
@@ -235,7 +273,7 @@ bool CtAiProviderLlama::generate(const CtAiRequest& request,
     int n_generated{0};
     int n_past = n_prompt;
     while (ok) {
-        if (cancel and cancel->load()) break;
+        if ((cancel and cancel->load()) or g_exiting.load()) break;
         if (n_generated >= request.max_tokens or n_past >= n_ctx - 1) break;
         llama_token tok = llama_sampler_sample(pSampler, _pCtx, -1);
         if (llama_vocab_is_eog(_pVocab, tok)) break;
@@ -273,6 +311,7 @@ bool CtAiProviderLlama::embed(const std::vector<std::string>& texts,
     const bool add_bos = llama_vocab_get_add_bos(_pVocab);
     const bool has_encoder = llama_model_has_encoder(_pModel);
     for (const std::string& text : texts) {
+        if (g_exiting.load()) { error = "Application exiting"; return false; }
         // tokenize, truncated to the batch size
         int32_t n = -llama_tokenize(_pVocab, text.c_str(), static_cast<int32_t>(text.size()), nullptr, 0, add_bos, true);
         std::vector<llama_token> tokens(std::max(n, 1));
