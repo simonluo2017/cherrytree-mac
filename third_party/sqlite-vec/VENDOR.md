@@ -3,7 +3,7 @@
 - Upstream: https://github.com/asg017/sqlite-vec
 - Commit: 04d28bd21773981e2d266bbf6aa4efbd011eb4f6
 - Commit date: Sun May 17 23:50:43 2026 -0700
-- Version: 0.1.10-alpha.4
+- Version: 0.1.10-alpha.4 (the upstream VERSION file is not kept: on a case insensitive filesystem it would shadow the C++ <version> header)
 - License: MIT or Apache-2.0 (see LICENSE-MIT / LICENSE-APACHE)
 
 Only the extension sources are kept (sqlite-vec.c and the files it includes)

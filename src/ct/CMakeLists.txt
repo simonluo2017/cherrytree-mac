@@ -99,8 +99,8 @@ if(USE_LLAMA_CPP)
 endif()
 # sqlite-vec (vendored, see third_party/sqlite-vec/VENDOR.md): vector search inside the search index database
 add_library(sqlite_vec STATIC ${CMAKE_SOURCE_DIR}/third_party/sqlite-vec/sqlite-vec.c)
-target_include_directories(sqlite_vec PUBLIC ${CMAKE_SOURCE_DIR}/third_party/sqlite-vec ${SQLITE_INCLUDE_DIRS})
-target_compile_definitions(sqlite_vec PUBLIC SQLITE_VEC_STATIC)
+target_include_directories(sqlite_vec PRIVATE ${CMAKE_SOURCE_DIR}/third_party/sqlite-vec ${SQLITE_INCLUDE_DIRS})
+target_compile_definitions(sqlite_vec PRIVATE SQLITE_VEC_STATIC)
 target_compile_options(sqlite_vec PRIVATE -w)
 target_link_libraries(cherrytree_shared sqlite_vec)
 target_link_libraries(cherrytree_shared
