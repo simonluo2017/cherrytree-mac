@@ -50,15 +50,15 @@ publisher=Qwen (Alibaba Cloud)
 repo=Qwen/Qwen2.5-7B-Instruct-GGUF
 file=qwen2.5-7b-instruct-q4_k_m-00001-of-00002.gguf
 files_extra=qwen2.5-7b-instruct-q4_k_m-00002-of-00002.gguf
-size_bytes_extra=0
-sha256_extra=
+size_bytes_extra=689872288
+sha256_extra=539cf93f78e887edea1c04e2d7d8cdaca9d01dae9c9025bcb8accbe29df3d72a
 license=Apache-2.0
 license_url=https://huggingface.co/Qwen/Qwen2.5-7B-Instruct-GGUF/blob/main/LICENSE
 min_memory_gb=16
 context_train=32768
 description=Best quality; complex questions, code and long notes.
-size_bytes=0
-sha256=
+size_bytes=3993201344
+sha256=dfce12e3862a5283ccfb88221b48480e58745165de856439950d0f22590580db
 
 [qwen3-embedding-0.6b-q8_0]
 name=Qwen3 Embedding 0.6B (Q8_0)
@@ -75,8 +75,8 @@ embedding_dim=1024
 pooling=last
 query_prefix=Instruct: Given a search query, retrieve relevant passages from personal notes\nQuery:
 description=Recommended embedding model for the semantic search index: multilingual (Chinese and English), 1024 dimensions.
-size_bytes=0
-sha256=
+size_bytes=639150592
+sha256=06507c7b42688469c4e7298b0a1e16deff06caf291cf0a5b278c308249c3e439
 
 [nomic-embed-text-v1.5-q8_0]
 name=Nomic Embed Text v1.5 (Q8_0)
@@ -93,5 +93,6 @@ embedding_dim=768
 pooling=mean
 query_prefix=search_query:
 description=Smaller and faster embedding model, English first; 768 dimensions.
-size_bytes=0
-sha256=
+size_bytes=146146432
+sha256=3e24342164b3d94991ba9692fdc0dd08e3fd7362e0aacc396a9a5c54a544c3b7
+
