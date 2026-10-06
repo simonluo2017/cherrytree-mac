@@ -104,7 +104,9 @@ if(USE_LLAMA_CPP)
   target_link_libraries(cherrytree_shared llama)
 endif()
 if(APPLE)
-  # Cocoa integration (Quit Apple event -> CherryTree quit flow), Objective-C++
+  # Cocoa integration (Quit Apple event -> CherryTree quit flow): Objective-C++ compiled by the
+  # C++ compiler (clang) with -x objective-c++, so that no OBJCXX CMake language is needed
+  set_source_files_properties(ct_macos_app.mm PROPERTIES LANGUAGE CXX COMPILE_OPTIONS "-x;objective-c++")
   target_sources(cherrytree_shared PRIVATE ct_macos_app.mm)
   target_link_libraries(cherrytree_shared "-framework Cocoa")
   # the provider is always built on macOS: it loads libct_applefm.dylib at runtime when present

@@ -245,7 +245,6 @@ endif()
 #    application itself runs on older macOS without it (the provider reports "not available")
 if(APPLE)
   option(USE_APPLE_FM "Build the Apple Foundation Models (Apple Intelligence) bridge" ON)
-  enable_language(OBJCXX)  # src/ct/ct_macos_app.mm
 endif()
 set(CT_APPLE_FM_BRIDGE OFF)
 if(APPLE AND USE_APPLE_FM)
