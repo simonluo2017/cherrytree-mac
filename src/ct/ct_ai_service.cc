@@ -29,6 +29,23 @@
 #ifdef HAVE_APPLE_FM
 #include "ct_ai_provider_apple.h"
 #endif
+#include "ct_ai_provider_openai.h"
+
+namespace {
+CtAiProviderOpenAI::Settings api_settings(const CtConfig* pConfig)
+{
+    CtAiProviderOpenAI::Settings s;
+    s.base_url = pConfig->aiApiBaseUrl;
+    s.api_key = pConfig->aiApiKey;
+    s.model = pConfig->aiApiModel;
+    s.embedding_model = pConfig->aiApiEmbeddingModel;
+    s.context_size = pConfig->aiContextSize;
+    s.proxy = pConfig->proxyUrlColonPort;
+    s.proxy_user = pConfig->proxyUsername;
+    s.proxy_password = pConfig->proxyPassword;
+    return s;
+}
+}
 
 CtAiService::CtAiService(CtConfig* pCtConfig)
  : _pCtConfig{pCtConfig}
@@ -111,7 +128,18 @@ bool CtAiService::is_configured() const
 {
     if (not _uProvider) return false;
     if (uses_apple_backend()) return true; // availability is checked when loading
+    if (uses_api_backend()) return not _pCtConfig->aiApiBaseUrl.empty() and not _pCtConfig->aiApiModel.empty();
     return not _pCtConfig->aiModelPath.empty();
+}
+
+bool CtAiService::uses_api_backend() const
+{
+    return _pCtConfig->aiBackend == "openai";
+}
+
+bool CtAiService::uses_api_embeddings() const
+{
+    return uses_api_backend() and not _pCtConfig->aiApiEmbeddingModel.empty();
 }
 
 bool CtAiService::uses_apple_backend() const
@@ -149,6 +177,9 @@ void CtAiService::apply_settings()
             _uProvider = std::make_unique<CtAiProviderApple>();
 #endif
         }
+        else if (uses_api_backend()) {
+            _uProvider = std::make_unique<CtAiProviderOpenAI>(api_settings(_pCtConfig));
+        }
         else {
 #ifdef HAVE_LLAMA_CPP
             CtAiProviderLlama::Settings settings;
@@ -162,6 +193,19 @@ void CtAiService::apply_settings()
     {
         std::lock_guard<std::mutex> lock{_embeddingMutex};
         bool changed = true;
+        if (uses_api_embeddings()) {
+            if (auto* pApi = dynamic_cast<CtAiProviderOpenAI*>(_uEmbeddingProvider.get())) {
+                const CtAiProviderOpenAI::Settings& old = pApi->settings();
+                changed = old.base_url != _pCtConfig->aiApiBaseUrl or old.api_key != _pCtConfig->aiApiKey or
+                          old.embedding_model != _pCtConfig->aiApiEmbeddingModel;
+            }
+            if (changed) {
+                CtAiProviderOpenAI::Settings s = api_settings(_pCtConfig);
+                s.model.clear();
+                _uEmbeddingProvider = std::make_unique<CtAiProviderOpenAI>(s);
+            }
+            return;
+        }
 #ifdef HAVE_LLAMA_CPP
         if (auto* pLlama = dynamic_cast<CtAiProviderLlama*>(_uEmbeddingProvider.get())) {
             changed = pLlama->settings().model_path != _pCtConfig->aiEmbeddingModelPath or
@@ -186,11 +230,14 @@ void CtAiService::apply_settings()
 
 bool CtAiService::is_embedding_configured() const
 {
-    return _uEmbeddingProvider and not _pCtConfig->aiEmbeddingModelPath.empty() and fs::is_regular_file(_pCtConfig->aiEmbeddingModelPath);
+    if (not _uEmbeddingProvider) return false;
+    if (uses_api_embeddings()) return not _pCtConfig->aiApiBaseUrl.empty();
+    return not _pCtConfig->aiEmbeddingModelPath.empty() and fs::is_regular_file(_pCtConfig->aiEmbeddingModelPath);
 }
 
 std::string CtAiService::embedding_model_id() const
 {
+    if (uses_api_embeddings()) return "api:" + _pCtConfig->aiApiEmbeddingModel;
     const std::string& path = _pCtConfig->aiEmbeddingModelPath;
     const auto slash = path.find_last_of("/\\");
     return slash == std::string::npos ? path : path.substr(slash + 1);
@@ -199,7 +246,7 @@ std::string CtAiService::embedding_model_id() const
 bool CtAiService::embed_texts(const std::vector<std::string>& texts, std::vector<std::vector<float>>& out, std::string& error)
 {
     std::lock_guard<std::mutex> lock{_embeddingMutex};
-    if (not _uEmbeddingProvider or _pCtConfig->aiEmbeddingModelPath.empty()) { error = "No embedding model configured"; return false; }
+    if (not _uEmbeddingProvider or (not uses_api_embeddings() and _pCtConfig->aiEmbeddingModelPath.empty())) { error = "No embedding model configured"; return false; }
     if (not _uEmbeddingProvider->is_loaded() and not _uEmbeddingProvider->load(error)) return false;
     return _uEmbeddingProvider->embed(texts, out, error);
 }
@@ -207,7 +254,8 @@ bool CtAiService::embed_texts(const std::vector<std::string>& texts, std::vector
 bool CtAiService::embed_query(const std::string& query, std::vector<float>& out, std::string& error)
 {
     std::vector<std::vector<float>> vecs;
-    if (not embed_texts({_pCtConfig->aiEmbeddingQueryPrefix + query}, vecs, error) or vecs.empty()) return false;
+    const std::string prefix = uses_api_embeddings() ? std::string{} : _pCtConfig->aiEmbeddingQueryPrefix;
+    if (not embed_texts({prefix + query}, vecs, error) or vecs.empty()) return false;
     out = std::move(vecs.front());
     return true;
 }

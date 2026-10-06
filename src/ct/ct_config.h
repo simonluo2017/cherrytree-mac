@@ -130,7 +130,13 @@ public:
     // knowledge graph: entities and relations extracted from the chunks by the generation model (background)
     bool                                        knowledgeGraphEnabled{false};
     // generation backend: "llama" (GGUF file via llama.cpp) | "apple" (Apple Foundation Models, macOS 26+)
+    //                     | "openai" (OpenAI compatible HTTP API such as a LiteLLM proxy)
     std::string                                 aiBackend{"llama"};
+    // OpenAI compatible API server (LiteLLM): the text is sent to this server, off unless chosen
+    std::string                                 aiApiBaseUrl{"http://localhost:4000"};
+    std::string                                 aiApiKey;
+    std::string                                 aiApiModel;
+    std::string                                 aiApiEmbeddingModel;   // empty = embeddings stay on the local GGUF model
     int                                         maxMatchesInPage{500};
     int                                         toolbarIconSize{1};
     int                                         multipleWordsSearchType{0}; // 0: exact match, 1: disregard order (AND), 2: match any (OR)

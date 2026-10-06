@@ -85,6 +85,7 @@ set(CT_SHARED_FILES
   ct_main_win_graph.cc
   ct_main_win_search.cc
   ct_ai_service.cc
+  ct_ai_provider_openai.cc
   ct_ai_models.cc
   ct_ai_panel.cc
   ct_actions_ai.cc
@@ -96,6 +97,8 @@ set(CT_SHARED_FILES
 )
 
 add_library(cherrytree_shared STATIC ${CT_SHARED_FILES})
+# nlohmann/json (MIT, header only) comes with the vendored llama.cpp: used by the OpenAI compatible API provider
+target_include_directories(cherrytree_shared PRIVATE ${CMAKE_SOURCE_DIR}/third_party/llama.cpp/vendor)
 if(USE_LLAMA_CPP)
   target_sources(cherrytree_shared PRIVATE ct_ai_provider_llama.cc)
   target_link_libraries(cherrytree_shared llama)

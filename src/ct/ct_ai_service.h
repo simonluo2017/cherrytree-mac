@@ -66,6 +66,10 @@ public:
     bool is_configured() const;
     /// the generation backend is Apple Foundation Models (config ai_backend=apple)
     bool uses_apple_backend() const;
+    /// the generation backend is an OpenAI compatible API server (config ai_backend=openai)
+    bool uses_api_backend() const;
+    /// embeddings come from the API server (api backend with an embedding model configured)
+    bool uses_api_embeddings() const;
     /// Apple Intelligence can be used on this Mac right now (reason filled otherwise)
     static bool apple_backend_available(std::string& reason);
     bool is_busy() const { return _busy; }

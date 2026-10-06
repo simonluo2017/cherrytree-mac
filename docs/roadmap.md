@@ -26,6 +26,7 @@
 | §20 Embedding + sqlite-vec | ✅ 完成 | 分块 + sqlite-vec 向量表，后台增量嵌入，Keyword / Semantic / Hybrid（RRF）检索，Related Notes |
 | §28 Ask Notebook / RAG | ✅ 完成 | 混合检索（关键词块 + 语义块，RRF）→ 上下文预算 → 生成，回答带 [n] 引用，Sources 可点击跳转 |
 | §22–§25 Knowledge Graph（第二版） | ✅ 完成 | SQLite `entities/relations/entity_mentions`（带来源块/节点），本地模型按块后台提取（`extract_graph.prompt`），图谱面板（Ctrl+Alt+G：实体列表 / 邻域图 / 关系 / 提及节点），Ask Notebook 检索加图谱块 + 图谱事实；派生索引可随时 Rebuild，不改笔记 |
+| §31 云端 / 远程 Provider（LiteLLM，OpenAI 兼容 API） | ✅ 完成 | `CtAiProviderOpenAI`：chat completions 流式 + embeddings，Preferences → AI → Backend 选 API server，默认关闭，明确提示文本会发送到服务器 |
 | §6 Plugin API | ⬜ 未开始 | |
 
 供应链原则：第三方 C/C++ 依赖（llama.cpp、sqlite-vec）以源码形式 vendor 进仓库并锁定 commit；打包脚本不联网；模型文件由应用内 Model Manager 从 manifest 列出的官方来源下载，下载前展示来源与许可证，下载后校验 SHA256。

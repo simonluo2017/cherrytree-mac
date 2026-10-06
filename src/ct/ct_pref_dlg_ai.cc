@@ -23,6 +23,7 @@
 #include "ct_main_win.h"
 #include "ct_ai_service.h"
 #include "ct_ai_models.h"
+#include "ct_ai_provider_openai.h"
 #include "ct_misc_utils.h"
 #include "ct_dialogs.h"
 #include "ct_filesystem.h"
@@ -41,7 +42,8 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     auto combo_backend = Gtk::manage(new Gtk::ComboBoxText{});
     combo_backend->append("llama", _("Local model file (llama.cpp, GGUF)"));
     combo_backend->append("apple", _("Apple Intelligence (Apple Foundation Models, macOS 26+)"));
-    combo_backend->set_active_id(_pConfig->aiBackend == "apple" ? "apple" : "llama");
+    combo_backend->append("openai", _("API server (LiteLLM / OpenAI compatible, sends the text to the server)"));
+    combo_backend->set_active_id(_pConfig->aiBackend);
     auto label_backend_status = Gtk::manage(new Gtk::Label{});
     label_backend_status->set_xalign(0.0);
     label_backend_status->set_line_wrap(true);
@@ -52,8 +54,13 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
             const bool ok = CtAiService::apple_backend_available(reason);
             label_backend_status->set_text(Glib::ustring{ok ? _("Apple Intelligence: available") : _("Apple Intelligence: not available")} + (ok ? "" : " · " + reason));
         }
+        else if (_pConfig->aiBackend == "openai") {
+            label_backend_status->set_text(str::format(_("API server: %s · model: %s"),
+                                                       CtAiProviderOpenAI::api_root(_pConfig->aiApiBaseUrl),
+                                                       _pConfig->aiApiModel.empty() ? std::string{_("none")} : _pConfig->aiApiModel));
+        }
         else {
-            label_backend_status->set_text(_("llama.cpp: embedding models (semantic search) always use llama.cpp."));
+            label_backend_status->set_text(_("llama.cpp: embedding models (semantic search) use llama.cpp too."));
         }
     };
     f_update_backend_status();
@@ -125,6 +132,73 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     vbox_model->append(*button_unload);
 #endif
     Gtk::Frame* frame_model = new_managed_frame_with_align(_("Local Model"), vbox_model);
+
+    // ---- OpenAI compatible API server (LiteLLM proxy and the like)
+    auto grid_api = Gtk::manage(new Gtk::Grid{});
+    grid_api->set_row_spacing(4);
+    grid_api->set_column_spacing(8);
+    auto label_api_warn = Gtk::manage(new Gtk::Label{});
+    label_api_warn->set_markup(_("<b>Not local:</b> with this backend the selection, the current node, the retrieved excerpts and (for the knowledge graph) every chunk of the document are sent to the server below. Use a server you trust, e.g. your own LiteLLM proxy. The API key is stored in the CherryTree config file."));
+    label_api_warn->set_xalign(0.0);
+    label_api_warn->set_line_wrap(true);
+    auto label_api_url = Gtk::manage(new Gtk::Label{_("Server URL")});
+    auto entry_api_url = Gtk::manage(new Gtk::Entry{});
+    entry_api_url->set_text(_pConfig->aiApiBaseUrl);
+    entry_api_url->set_placeholder_text("http://localhost:4000");
+    entry_api_url->set_hexpand(true);
+    auto label_api_key = Gtk::manage(new Gtk::Label{_("API Key")});
+    auto entry_api_key = Gtk::manage(new Gtk::Entry{});
+    entry_api_key->set_text(_pConfig->aiApiKey);
+    entry_api_key->set_visibility(false);
+    entry_api_key->set_placeholder_text(_("sk-… (empty if the server needs none)"));
+    auto label_api_model = Gtk::manage(new Gtk::Label{_("Chat Model")});
+    auto combo_api_model = Gtk::manage(new Gtk::ComboBoxText{true/*has_entry*/});
+    combo_api_model->get_entry()->set_text(_pConfig->aiApiModel);
+    combo_api_model->get_entry()->set_placeholder_text(_("model id, e.g. qwen-3.5-35b"));
+    combo_api_model->set_hexpand(true);
+    auto label_api_embed = Gtk::manage(new Gtk::Label{_("Embedding Model (optional)")});
+    auto combo_api_embed = Gtk::manage(new Gtk::ComboBoxText{true/*has_entry*/});
+    combo_api_embed->get_entry()->set_text(_pConfig->aiApiEmbeddingModel);
+    combo_api_embed->get_entry()->set_placeholder_text(_("empty = semantic search keeps the local GGUF embedding model"));
+    combo_api_embed->set_hexpand(true);
+    auto button_api_refresh = Gtk::manage(new Gtk::Button{_("Fetch Models")});
+    button_api_refresh->set_tooltip_text(_("Ask the server for its model list (GET /v1/models); also checks the URL and the key"));
+    auto label_api_status = Gtk::manage(new Gtk::Label{});
+    label_api_status->set_xalign(0.0);
+    label_api_status->set_line_wrap(true);
+    label_api_status->get_style_context()->add_class("dim-label");
+    for (Gtk::Label* pLabel : {label_api_url, label_api_key, label_api_model, label_api_embed}) pLabel->set_xalign(0.0);
+    grid_api->attach(*label_api_warn,     0, 0, 3, 1);
+    grid_api->attach(*label_api_url,      0, 1, 1, 1); grid_api->attach(*entry_api_url,    1, 1, 1, 1); grid_api->attach(*button_api_refresh, 2, 1, 1, 1);
+    grid_api->attach(*label_api_key,      0, 2, 1, 1); grid_api->attach(*entry_api_key,    1, 2, 2, 1);
+    grid_api->attach(*label_api_model,    0, 3, 1, 1); grid_api->attach(*combo_api_model,  1, 3, 2, 1);
+    grid_api->attach(*label_api_embed,    0, 4, 1, 1); grid_api->attach(*combo_api_embed,  1, 4, 2, 1);
+    grid_api->attach(*label_api_status,   0, 5, 3, 1);
+    Gtk::Frame* frame_api = new_managed_frame_with_align(_("API Server (LiteLLM / OpenAI compatible)"), grid_api);
+    auto f_api_settings = [this]()->CtAiProviderOpenAI::Settings{
+        CtAiProviderOpenAI::Settings s;
+        s.base_url = _pConfig->aiApiBaseUrl;
+        s.api_key = _pConfig->aiApiKey;
+        s.proxy = _pConfig->proxyUrlColonPort;
+        s.proxy_user = _pConfig->proxyUsername;
+        s.proxy_password = _pConfig->proxyPassword;
+        return s;
+    };
+    button_api_refresh->signal_clicked().connect([this, f_api_settings, combo_api_model, combo_api_embed, label_api_status](){
+        label_api_status->set_text(_("Contacting the server…"));
+        while (gtk_events_pending()) gtk_main_iteration();
+        std::string error;
+        const std::vector<std::string> models = CtAiProviderOpenAI::list_models(f_api_settings(), error);
+        if (not error.empty()) { label_api_status->set_text(error); return; }
+        const Glib::ustring chat = combo_api_model->get_entry()->get_text();
+        const Glib::ustring embed = combo_api_embed->get_entry()->get_text();
+        combo_api_model->remove_all();
+        combo_api_embed->remove_all();
+        for (const std::string& id : models) { combo_api_model->append(id); combo_api_embed->append(id); }
+        combo_api_model->get_entry()->set_text(chat);
+        combo_api_embed->get_entry()->set_text(embed);
+        label_api_status->set_text(str::format(_("%s models available: %s"), std::to_string(models.size()), str::join(models, ", ")));
+    });
 
     auto grid_gen = Gtk::manage(new Gtk::Grid{});
     grid_gen->set_row_spacing(4);
@@ -353,6 +427,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
 #if GTKMM_MAJOR_VERSION < 4
     pMainBox->pack_start(*frame_catalog, true, true);
     pMainBox->pack_start(*frame_model, false, false);
+    pMainBox->pack_start(*frame_api, false, false);
     pMainBox->pack_start(*frame_gen, false, false);
     pMainBox->pack_start(*frame_prompts, false, false);
 #else
@@ -366,6 +441,9 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
         const std::string& path = _pConfig->aiModelPath;
         if (_pConfig->aiBackend == "apple") {
             label_model_info->set_text(_("The GGUF file is not used while Apple Intelligence is the backend."));
+        }
+        else if (_pConfig->aiBackend == "openai") {
+            label_model_info->set_text(_("The GGUF file is not used while the API server is the backend."));
         }
         else if (path.empty()) {
             label_model_info->set_text(_("No model configured."));
@@ -389,12 +467,21 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
         _pConfig->aiModelPath = str::trim(entry_model->get_text()).raw();
         f_apply();
     });
-    combo_backend->signal_changed().connect([this, combo_backend, f_apply, f_update_backend_status](){
-        const Glib::ustring id = combo_backend->get_active_id();
-        _pConfig->aiBackend = id == "apple" ? "apple" : "llama";
+    auto f_apply_api = [this, f_apply, f_update_backend_status](){
         f_apply();
         f_update_backend_status();
+        // the embedding source may have changed: the index is re-embedded when the model id differs
+        apply_for_each_window([](CtMainWin* win) { win->semantic_index_kick(); });
+    };
+    combo_backend->signal_changed().connect([this, combo_backend, f_apply_api](){
+        const Glib::ustring id = combo_backend->get_active_id();
+        _pConfig->aiBackend = (id == "apple" or id == "openai") ? id.raw() : "llama";
+        f_apply_api();
     });
+    entry_api_url->signal_changed().connect([this, entry_api_url, f_apply_api](){ _pConfig->aiApiBaseUrl = str::trim(entry_api_url->get_text()).raw(); f_apply_api(); });
+    entry_api_key->signal_changed().connect([this, entry_api_key, f_apply_api](){ _pConfig->aiApiKey = str::trim(entry_api_key->get_text()).raw(); f_apply_api(); });
+    combo_api_model->get_entry()->signal_changed().connect([this, combo_api_model, f_apply_api](){ _pConfig->aiApiModel = str::trim(combo_api_model->get_entry()->get_text()).raw(); f_apply_api(); });
+    combo_api_embed->get_entry()->signal_changed().connect([this, combo_api_embed, f_apply_api](){ _pConfig->aiApiEmbeddingModel = str::trim(combo_api_embed->get_entry()->get_text()).raw(); f_apply_api(); });
     button_browse->signal_clicked().connect([this, entry_model](){
         CtDialogs::CtFileSelectArgs args{};
         args.curr_folder = fs::path{_pConfig->aiModelPath}.parent_path().string();

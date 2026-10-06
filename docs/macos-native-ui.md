@@ -143,6 +143,15 @@ Tools → AI (Local Model) → **Knowledge Graph**（Ctrl+Alt+G / ⌘⌥G）打�
 - **面板**：上半部分是实体列表（按提及次数排序，按类型着色，可过滤，"This node" 只看当前节点的实体），下半部分画出选中实体的邻域（中心是它，周围一圈是有关系的实体，边上写关系名，点击邻居即切换过去），再往下是关系明细和 "Mentioned in" 节点列表，点节点跳转并选中实体名。按钮：Build（开启并开始/继续）、Pause、Rebuild（清空重来）。
 - 生成模型可以是 llama.cpp 的 GGUF，也可以是 Apple Intelligence；小模型（1.5B）的抽取质量一般，3B/7B 明显更好。
 
+## API 服务器后端（LiteLLM / OpenAI 兼容）
+
+Preferences → AI (Local Model) → **Backend** 选 "API server (LiteLLM / OpenAI compatible)"，在下方 "API Server" 栏填 Server URL（如 `http://localhost:4000`，带不带 `/v1` 都行）、API Key、Chat Model；按 **Fetch Models** 会向服务器请求 `GET /v1/models` 列出可选模型（同时验证地址和 key）。之后 Ask This Node / Ask Notebook / Summarize / Explain / Tasks / Tags / 知识图谱提取全部走这个服务器（`POST /v1/chat/completions`，流式 SSE，可 Stop）。
+
+- **不是本地推理**：选中文本、当前节点、检索出的摘录，以及开启知识图谱时文档的每一个块，都会发送到你填的服务器。默认后端仍是本地 llama.cpp，这个后端只有你主动选择才生效；API key 明文存在 CherryTree 的 config 文件里。
+- Embedding Model (optional)：填了服务器上的嵌入模型（`POST /v1/embeddings`），语义检索和 Related Notes 就用它，本地 GGUF 嵌入模型不再需要；留空则语义检索继续用本地嵌入模型。切换嵌入来源会自动重建向量索引（索引里记录的模型 id 变了）。
+- Context Size 仍按 Preferences 里的 "Context Size (tokens)" 做 Ask Notebook 的摘录预算，远程大模型可以调大（如 32768）。
+- 实现：`CtAiProviderOpenAI`（libcurl + 仓库内 llama.cpp 自带的 nlohmann/json，MIT），走 Preferences → Links 里的代理设置；错误信息取自服务器返回的 `error.message`。
+
 ## Apple Intelligence（Apple Foundation Models 桥接）
 
 Preferences → AI (Local Model) → **Backend** 选 "Apple Intelligence (Apple Foundation Models, macOS 26+)"，之后 Ask / Summarize / Ask Notebook / 图谱提取都走系统自带的本地模型，不需要下载 GGUF（语义检索的嵌入模型仍然用 llama.cpp，Apple 没有公开嵌入接口）。
