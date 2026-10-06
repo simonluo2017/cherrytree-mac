@@ -563,39 +563,55 @@ bool app_bundle_setup_env()
     };
     f_setenv_default("XDG_DATA_DIRS", res / "share");
     f_setenv_default("GSETTINGS_SCHEMA_DIR", res / "share" / "glib-2.0" / "schemas");
-    // gdk-pixbuf loaders: the module paths of a loaders.cache must be absolute (relative names
-    // are passed as they are to dlopen), but the bundle can be anywhere: rewrite the bundled
-    // cache with the current absolute paths into the user cache directory
-    const fs::path loadersDir = res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders";
-    const fs::path loadersCacheTemplate = res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders.cache";
-    f_setenv_default("GDK_PIXBUF_MODULEDIR", loadersDir);
-    if (Glib::getenv("GDK_PIXBUF_MODULE_FILE").empty() and is_regular_file(loadersCacheTemplate)) {
+    // module caches (gdk-pixbuf loaders, GTK input methods): their module paths must be
+    // absolute (relative names are passed as they are to dlopen), but the bundle can be
+    // anywhere: rewrite the bundled cache with the current absolute paths into the user
+    // cache directory and point the library to that copy through the environment variable
+    auto f_rewrite_module_cache = [](const fs::path& cacheTemplate, const fs::path& modulesDir,
+                                     const char* cacheName, const char* envVar){
+        if (not Glib::getenv(envVar).empty() or not is_regular_file(cacheTemplate)) return;
         try {
-            const std::string content = Glib::file_get_contents(loadersCacheTemplate.string());
+            const std::string content = Glib::file_get_contents(cacheTemplate.string());
             std::string rewritten;
             rewritten.reserve(content.size() + 1024);
             std::istringstream iss{content};
             std::string line;
             while (std::getline(iss, line)) {
                 // a module line is the quoted file name alone, e.g. "libpixbufloader_svg.so"
-                if (line.size() > 2 and line.front() == '"' and line.back() == '"' and
-                    line.find('/') == std::string::npos and
-                    (line.find(".so\"") != std::string::npos or line.find(".dylib\"") != std::string::npos))
+                // (gtk-query-immodules leaves a trailing space after the closing quote)
+                std::string trimmed = line;
+                while (not trimmed.empty() and (trimmed.back() == ' ' or trimmed.back() == '\r')) trimmed.pop_back();
+                if (trimmed.size() > 2 and trimmed.front() == '"' and trimmed.back() == '"' and
+                    trimmed.find('/') == std::string::npos and
+                    (trimmed.find(".so\"") != std::string::npos or trimmed.find(".dylib\"") != std::string::npos))
                 {
-                    line = "\"" + (loadersDir / line.substr(1, line.size() - 2)).string() + "\"";
+                    line = "\"" + (modulesDir / trimmed.substr(1, trimmed.size() - 2)).string() + "\" ";
                 }
                 rewritten += line;
                 rewritten += "\n";
             }
             const fs::path cacheDir = fs::path{Glib::get_user_cache_dir()} / "cherrytree";
             if (g_mkdir_with_parents(cacheDir.c_str(), 0755) == 0) {
-                const fs::path cacheFile = cacheDir / "gdk-pixbuf-loaders.cache";
+                const fs::path cacheFile = cacheDir / cacheName;
                 Glib::file_set_contents(cacheFile.string(), rewritten);
-                Glib::setenv("GDK_PIXBUF_MODULE_FILE", cacheFile.string(), true/*overwrite*/);
+                Glib::setenv(envVar, cacheFile.string(), true/*overwrite*/);
             }
         }
         catch (Glib::Error& error) {
-            g_warning("gdk-pixbuf loaders cache: %s", error.what().c_str());
+            g_warning("%s: %s", cacheName, error.what().c_str());
+        }
+    };
+    const fs::path loadersDir = res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders";
+    f_setenv_default("GDK_PIXBUF_MODULEDIR", loadersDir);
+    f_rewrite_module_cache(res / "lib" / "gdk-pixbuf-2.0" / "2.10.0" / "loaders.cache", loadersDir,
+                           "gdk-pixbuf-loaders.cache", "GDK_PIXBUF_MODULE_FILE");
+    // GTK input methods: im-quartz bridges the macOS input methods (Chinese, Japanese, Korean...)
+    const fs::path immodulesDir = res / "lib" / "gtk-3.0" / "3.0.0" / "immodules";
+    if (is_directory(immodulesDir)) {
+        f_rewrite_module_cache(res / "lib" / "gtk-3.0" / "3.0.0" / "immodules.cache", immodulesDir,
+                               "gtk-immodules.cache", "GTK_IM_MODULE_FILE");
+        if (Glib::getenv("GTK_IM_MODULE").empty() and is_regular_file(immodulesDir / "im-quartz.so")) {
+            Glib::setenv("GTK_IM_MODULE", "quartz", true/*overwrite*/);
         }
     }
     f_setenv_default("GTK_DATA_PREFIX", res);

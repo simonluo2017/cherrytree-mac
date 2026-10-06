@@ -118,11 +118,30 @@ cp "$LOADERS_SRC"/*.so "$LOADERS_DST/"
 gdk-pixbuf-query-loaders "$LOADERS_SRC"/*.so \
   | sed "s|\"$LOADERS_SRC/|\"|" > "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
 grep -q "svg" "$RES/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" || die "no svg loader in loaders.cache (brew install librsvg)"
+# GTK input method modules: im-quartz connects the macOS input methods (Chinese, Japanese,
+# Korean...) to GTK; without it only plain latin keys get through
+IMMODULES_SRC="$BREW_PREFIX/lib/gtk-3.0/3.0.0/immodules"
+IMMODULES_DST="$RES/lib/gtk-3.0/3.0.0/immodules"
+IMMODULES_SO=()
+if [ -d "$IMMODULES_SRC" ] && ls "$IMMODULES_SRC"/*.so > /dev/null 2>&1; then
+  mkdir -p "$IMMODULES_DST"
+  cp "$IMMODULES_SRC"/*.so "$IMMODULES_DST/"
+  QUERY_IM="$BREW_PREFIX/bin/gtk-query-immodules-3.0"
+  [ -x "$QUERY_IM" ] || QUERY_IM="$(command -v gtk-query-immodules-3.0 || true)"
+  [ -n "$QUERY_IM" ] || die "gtk-query-immodules-3.0 not found (part of gtk+3)"
+  # module paths made relative, the application rewrites them to the bundle location at runtime
+  "$QUERY_IM" "$IMMODULES_SRC"/*.so | sed "s|\"$IMMODULES_SRC/|\"|" > "$RES/lib/gtk-3.0/3.0.0/immodules.cache"
+  grep -q "quartz" "$RES/lib/gtk-3.0/3.0.0/immodules.cache" || die "no quartz input method module in immodules.cache"
+  for so in "$IMMODULES_DST"/*.so; do IMMODULES_SO+=("$so"); done
+  echo "== input method modules bundled: $(ls "$IMMODULES_DST" | tr '\n' ' ')"
+else
+  echo "== no GTK immodules directory in $BREW_PREFIX (input methods are built into GTK)"
+fi
 
 # -- copy the dylibs into the bundle and rewrite the install names
 echo "== bundling the dylibs"
 DYLIBB_ARGS=(-od -b -d "$FRAMEWORKS" -p "@executable_path/../Frameworks" -s "$BREW_PREFIX/lib" -x "$MACOS/cherrytree")
-for so in "$LOADERS_DST"/*.so; do
+for so in "$LOADERS_DST"/*.so "${IMMODULES_SO[@]}"; do
   DYLIBB_ARGS+=(-x "$so")
 done
 dylibbundler "${DYLIBB_ARGS[@]}"
@@ -145,7 +164,7 @@ dedupe_rpaths() {
   done
 }
 dedupe_rpaths "$MACOS/cherrytree"
-find "$FRAMEWORKS" "$LOADERS_DST" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 | while IFS= read -r -d '' f; do
+find "$FRAMEWORKS" "$RES/lib" -type f \( -name "*.dylib" -o -name "*.so" \) -print0 | while IFS= read -r -d '' f; do
   dedupe_rpaths "$f"
 done
 

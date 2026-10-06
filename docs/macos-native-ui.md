@@ -217,6 +217,7 @@ open build/macos/cherrytree-mac-*-macos-*.dmg  # 把 cherrytree-mac.app 拖到 A
 - 第一次启动在访达里右键 → 打开（应用是本机 ad-hoc 签名，没有 Apple 公证）。
 - 从 Dock 右键"退出"、注销或关机时，macOS 发来的 Quit 事件会走 CherryTree 自己的退出流程（`src/ct/ct_macos_app.mm` 接管 `applicationShouldTerminate:`）：有未保存的修改会先询问，和菜单 Quit / ⌘Q 一样。
 - 安装后与 Homebrew 无关：程序从 `cherrytree-mac.app/Contents/Resources` 读取自己的数据和 GTK 运行文件。
+- 中文 / 日文 / 韩文输入法：打包脚本把 GTK 的输入法模块（`lib/gtk-3.0/3.0.0/immodules/im-quartz.so`）一起装进包里，启动时把模块缓存改写成当前路径并设置 `GTK_IM_MODULE_FILE` / `GTK_IM_MODULE=quartz`；没有这个模块时 GTK 只能输入拉丁字母。
 - 以 App 形式运行时，"文稿"文件夹等权限提示会以 CherryTree 的名义弹出，不再依赖终端的权限。
 - 拼写检查的词典（enchant/hunspell）不在包内，有 Homebrew 的机器上照常可用。
 
