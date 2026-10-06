@@ -268,10 +268,17 @@ if(APPLE AND USE_APPLE_FM)
 endif()
 if(CT_APPLE_FM_BRIDGE)
   add_library(ct_applefm SHARED src/apple/CtAppleFM.swift)
-  set_target_properties(ct_applefm PROPERTIES OUTPUT_NAME ct_applefm Swift_LANGUAGE_VERSION 5)
-  # the framework only exists on macOS 26: weak link so that the dylib loads on older systems
-  target_link_options(ct_applefm PRIVATE "-Xlinker" "-weak_framework" "-Xlinker" "FoundationModels")
+  # the directory wide C++ options, definitions and include paths make no sense for swiftc: drop them
+  set_target_properties(ct_applefm PROPERTIES
+    OUTPUT_NAME ct_applefm
+    Swift_LANGUAGE_VERSION 5
+    COMPILE_OPTIONS ""
+    COMPILE_DEFINITIONS ""
+    INCLUDE_DIRECTORIES "")
   target_compile_options(ct_applefm PRIVATE -parse-as-library)
+  # the framework only exists on macOS 26: weak link so that the dylib loads on older systems
+  # (SHELL: keeps the repeated -Xlinker from being de-duplicated)
+  target_link_options(ct_applefm PRIVATE "SHELL:-Xlinker -weak_framework -Xlinker FoundationModels")
 endif()
 
 include(FindPackageHandleStandardArgs)
