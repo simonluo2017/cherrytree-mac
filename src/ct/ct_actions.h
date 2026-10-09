@@ -308,7 +308,8 @@ public:
     void ai_ask_notebook_question(const Glib::ustring& question);
     void ai_toggle_panel();
     void ai_toggle_graph_panel();
-    void ai_toggle_background();
+    void ai_toggle_semantic_index_pause();
+    void ai_toggle_graph_pause();
     void ai_insert_text_in_node(const Glib::ustring& text);
     void ai_new_subnode_with_text(const Glib::ustring& name, const Glib::ustring& text);
     void toggle_show_hide_menubar();

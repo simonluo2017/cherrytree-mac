@@ -86,10 +86,15 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     entry_embed->set_placeholder_text(_("used by the semantic search index; pick one in the catalog and press Use This Model"));
     auto check_semantic = Gtk::manage(new Gtk::CheckButton{_("Keep a Semantic Search Index of the Document (embeds the notes in the background)")});
     check_semantic->set_active(_pConfig->semanticIndexEnabled);
-    auto check_bg_pause = Gtk::manage(new Gtk::CheckButton{_("Pause Background AI Work (semantic embedding, knowledge graph extraction) to save energy; your own requests still run")});
-    check_bg_pause->set_active(_pConfig->aiBackgroundPaused);
+    auto check_bg_pause = Gtk::manage(new Gtk::CheckButton{_("Pause the Semantic Index Embedding (local GPU work, the part that heats the Mac); keyword search and your own requests still run")});
+    check_bg_pause->set_active(_pConfig->semanticIndexPaused);
     check_bg_pause->signal_toggled().connect([this, check_bg_pause](){
-        apply_for_each_window([check_bg_pause](CtMainWin* win) { win->ai_background_set_paused(check_bg_pause->get_active()); });
+        apply_for_each_window([check_bg_pause](CtMainWin* win) { win->semantic_index_set_paused(check_bg_pause->get_active()); });
+    });
+    auto check_graph_pause = Gtk::manage(new Gtk::CheckButton{_("Pause the Knowledge Graph Extraction (generation model: API calls or local GPU)")});
+    check_graph_pause->set_active(_pConfig->knowledgeGraphPaused);
+    check_graph_pause->signal_toggled().connect([this, check_graph_pause](){
+        apply_for_each_window([check_graph_pause](CtMainWin* win) { win->graph_extract_set_paused(check_graph_pause->get_active()); });
     });
     auto hbox_pace = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 4/*spacing*/});
     auto label_pace = Gtk::manage(new Gtk::Label{_("Background AI Pace")});
@@ -104,7 +109,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     hbox_pace->pack_start(*combo_pace, true, true);
     auto check_graph = Gtk::manage(new Gtk::CheckButton{_("Build a Knowledge Graph of the Document (the generation model reads the notes in the background and extracts entities and relations; Tools → AI → Knowledge Graph)")});
     check_graph->set_active(_pConfig->knowledgeGraphEnabled);
-    for (Gtk::CheckButton* pCheck : {check_semantic, check_graph, check_bg_pause}) {
+    for (Gtk::CheckButton* pCheck : {check_semantic, check_graph, check_bg_pause, check_graph_pause}) {
         if (auto pLabel = dynamic_cast<Gtk::Label*>(pCheck->get_child())) { pLabel->set_line_wrap(true); pLabel->set_xalign(0.0); }
     }
     hbox_embed->pack_start(*label_embed, false, false);
@@ -123,6 +128,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     vbox_model->pack_start(*check_semantic, false, false);
     vbox_model->pack_start(*check_graph, false, false);
     vbox_model->pack_start(*check_bg_pause, false, false);
+    vbox_model->pack_start(*check_graph_pause, false, false);
     vbox_model->pack_start(*hbox_pace, false, false);
     vbox_model->pack_start(*button_unload, false, false);
     check_graph->signal_toggled().connect([this, check_graph](){

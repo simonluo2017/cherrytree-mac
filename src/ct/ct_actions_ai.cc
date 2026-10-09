@@ -105,13 +105,22 @@ void CtActions::_ai_run_prompt(const std::string& prompt_id, const std::map<std:
     }
 }
 
-void CtActions::ai_toggle_background()
+void CtActions::ai_toggle_semantic_index_pause()
 {
-    const bool paused = not _pCtConfig->aiBackgroundPaused;
-    for (CtMainWin* pWin : {_pCtMainWin}) pWin->ai_background_set_paused(paused);
+    const bool paused = not _pCtConfig->semanticIndexPaused;
+    _pCtMainWin->semantic_index_set_paused(paused);
     CtDialogs::info_dialog(paused
-        ? _("Background AI work is paused: the semantic index and the knowledge graph stop until you resume them (Tools → AI → Pause/Resume Background AI Work). Your own requests still work.")
-        : _("Background AI work resumed."), *_pCtMainWin);
+        ? _("The semantic index (embedding with the local model, the part that heats the Mac) is paused until you resume it from the same menu. Keyword search, Ask Notebook and your own requests still work.")
+        : _("The semantic index (embedding) is resumed."), *_pCtMainWin);
+}
+
+void CtActions::ai_toggle_graph_pause()
+{
+    const bool paused = not _pCtConfig->knowledgeGraphPaused;
+    _pCtMainWin->graph_extract_set_paused(paused);
+    CtDialogs::info_dialog(paused
+        ? _("The knowledge graph extraction is paused until you resume it from the same menu or press Build in the graph panel. The graph built so far stays available.")
+        : _("The knowledge graph extraction is resumed."), *_pCtMainWin);
 }
 
 void CtActions::ai_toggle_graph_panel()

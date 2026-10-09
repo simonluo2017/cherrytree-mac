@@ -317,8 +317,10 @@ void CtMenu::init_actions(CtActions* pActions)
             _("Ask a Question About the Whole Document: the Relevant Notes are Retrieved First, the Answer Cites Them"), sigc::mem_fun(*pActions, &CtActions::ai_ask_notebook)});
         _actions.push_back(CtMenuAction{tools_cat, "ai_toggle_panel", "ct_execute", _("AI: Show/Hide _Panel"), None,
             _("Show/Hide the AI Panel"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_panel)});
-        _actions.push_back(CtMenuAction{tools_cat, "ai_toggle_background", "ct_execute", _("AI: Pause/Resume _Background Work"), None,
-            _("Pause or Resume the Background AI Work (Semantic Index Embedding, Knowledge Graph Extraction) to Save Energy"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_background)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_toggle_semantic_pause", "ct_execute", _("AI: Pause/Resume Semantic _Index (Embedding)"), None,
+            _("Pause or Resume the Background Embedding of the Notes for the Semantic Search (Uses the Local GPU)"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_semantic_index_pause)});
+        _actions.push_back(CtMenuAction{tools_cat, "ai_toggle_graph_pause", "ct_execute", _("AI: Pause/Resume Knowledge Graph E_xtraction"), None,
+            _("Pause or Resume the Background Extraction of Entities and Relations with the Generation Model"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_graph_pause)});
         _actions.push_back(CtMenuAction{tools_cat, "ai_graph_panel", "ct_execute", _("AI: Knowledge _Graph"), KB_CONTROL+KB_ALT+"g",
             _("Show/Hide the Knowledge Graph: the Entities and Relations Extracted From the Notes by the Local AI Model"), sigc::mem_fun(*pActions, &CtActions::ai_toggle_graph_panel)});
         _actions.push_back(CtMenuAction{tools_cat, "spellcheck_toggle", "ct_spell-check", _("Enable/Disable _Spell Check"), KB_SHIFT+KB_ALT+"s",

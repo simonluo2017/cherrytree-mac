@@ -198,8 +198,10 @@ public:
     bool graph_extract_running() const { return _graphExtracting; }
     /// drop the graph and extract everything again
     void graph_rebuild();
-    /// pause/resume every background AI job (semantic embedding, graph extraction); persisted in the config
-    void ai_background_set_paused(const bool paused);
+    /// pause/resume the semantic index embedding; persisted in the config
+    void semantic_index_set_paused(const bool paused);
+    /// pause/resume the knowledge graph extraction; persisted in the config
+    void graph_extract_set_paused(const bool paused);
     /// rest time (ms) after a background step that took work_us, from the configured pace
     int ai_background_rest_ms(const gint64 work_us) const;
     CtGraphPanel* graph_panel() { return _pGraphPanel; }

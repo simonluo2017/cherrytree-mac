@@ -129,8 +129,10 @@ public:
     bool                                        semanticIndexEnabled{true};
     // knowledge graph: entities and relations extracted from the chunks by the generation model (background)
     bool                                        knowledgeGraphEnabled{false};
-    // pause the background AI work (semantic embedding, knowledge graph extraction), e.g. on battery
-    bool                                        aiBackgroundPaused{false};
+    // pause the background AI work independently: the semantic index (embedding, local GPU) and
+    // the knowledge graph extraction (generation model, possibly a remote API)
+    bool                                        semanticIndexPaused{false};
+    bool                                        knowledgeGraphPaused{false};
     // pace of the background AI work: 0 = full speed, 1 = balanced (rest as long as the work took),
     // 2 = quiet (rest three times as long): lower average power, no fan, slower indexing
     int                                         aiBackgroundPace{1};

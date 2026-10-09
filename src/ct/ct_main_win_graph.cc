@@ -35,7 +35,7 @@ const int GRAPH_MAX_TOKENS{700};
 
 void CtMainWin::graph_extract_kick()
 {
-    if (not _uSearchIndex or not _pCtConfig->knowledgeGraphEnabled or _pCtConfig->aiBackgroundPaused) return;
+    if (not _uSearchIndex or not _pCtConfig->knowledgeGraphEnabled or _pCtConfig->knowledgeGraphPaused) return;
     if (_graphExtracting or _graphPaused) return;
     if (_graphFailures >= GRAPH_MAX_FAILURES) return; // stopped until the next explicit build
     CtAiService* pService = ai_service();
@@ -164,19 +164,32 @@ void CtMainWin::_graph_on_done(const bool ok, const std::string& error)
     else Glib::signal_idle().connect_once([this](){ _graph_extract_next(); }, Glib::PRIORITY_LOW);
 }
 
-void CtMainWin::ai_background_set_paused(const bool paused)
+void CtMainWin::graph_extract_set_paused(const bool paused)
 {
-    _pCtConfig->aiBackgroundPaused = paused;
+    _pCtConfig->knowledgeGraphPaused = paused;
     if (paused) {
         graph_extract_pause();
-        _ctStatusBar.update_status(_("Background AI work paused (semantic index, knowledge graph)"));
+        _ctStatusBar.update_status(_("Knowledge graph extraction paused"));
     }
     else {
-        _ctStatusBar.update_status(_("Background AI work resumed"));
-        semantic_index_kick();
+        _ctStatusBar.update_status(_("Knowledge graph extraction resumed"));
         graph_extract_resume();
     }
     if (_pGraphPanel) _pGraphPanel->refresh();
+}
+
+void CtMainWin::semantic_index_set_paused(const bool paused)
+{
+    _pCtConfig->semanticIndexPaused = paused;
+    if (paused) {
+        // the running batch finishes (a few seconds), no new one is started
+        _ctStatusBar.update_status(_("Semantic index (embedding) paused"));
+    }
+    else {
+        _ctStatusBar.update_status(_("Semantic index (embedding) resumed"));
+        semantic_index_kick();
+    }
+    if (_pSearchPanel) _pSearchPanel->refresh();
 }
 
 int CtMainWin::ai_background_rest_ms(const gint64 work_us) const

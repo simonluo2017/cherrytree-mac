@@ -47,7 +47,7 @@ gint64 CtMainWin::semantic_index_pending() const
 
 void CtMainWin::semantic_index_kick()
 {
-    if (not _uSearchIndex or not _pCtConfig->semanticIndexEnabled or _pCtConfig->aiBackgroundPaused) return;
+    if (not _uSearchIndex or not _pCtConfig->semanticIndexEnabled or _pCtConfig->semanticIndexPaused) return;
     CtAiService* pService = ai_service();
     if (not pService or not pService->is_embedding_configured()) return;
     if (_semanticBusy) return;
@@ -162,7 +162,7 @@ void CtMainWin::_semantic_on_done()
         _ctStatusBar.update_status(str::format(_("Semantic index: %s chunks could not be embedded and were skipped"), std::to_string(_uSearchIndex->count_failed_chunks())));
     }
     const gint64 remaining = _uSearchIndex->count_pending_chunks();
-    if (remaining > 0 and _pCtConfig->aiBackgroundPaused) {
+    if (remaining > 0 and _pCtConfig->semanticIndexPaused) {
         _ctStatusBar.update_status(str::format(_("Semantic index paused: %s chunks remaining"), std::to_string(remaining)));
     }
     else if (remaining > 0) {
