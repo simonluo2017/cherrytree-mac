@@ -198,6 +198,8 @@ public:
     bool graph_extract_running() const { return _graphExtracting; }
     /// drop the graph and extract everything again
     void graph_rebuild();
+    /// pause/resume every background AI job (semantic embedding, graph extraction); persisted in the config
+    void ai_background_set_paused(const bool paused);
     CtGraphPanel* graph_panel() { return _pGraphPanel; }
     void graph_panel_show(const bool show);
     bool graph_panel_visible() const;

@@ -47,7 +47,7 @@ gint64 CtMainWin::semantic_index_pending() const
 
 void CtMainWin::semantic_index_kick()
 {
-    if (not _uSearchIndex or not _pCtConfig->semanticIndexEnabled) return;
+    if (not _uSearchIndex or not _pCtConfig->semanticIndexEnabled or _pCtConfig->aiBackgroundPaused) return;
     CtAiService* pService = ai_service();
     if (not pService or not pService->is_embedding_configured()) return;
     if (_semanticBusy) return;
@@ -88,6 +88,7 @@ void CtMainWin::_semantic_start_batch()
     std::vector<std::string> texts;
     for (const CtChunk& c : _semanticBatch) texts.push_back(c.text.raw());
     _semanticWorker = std::thread([this, pService, texts](){
+        ct_ai_background_thread_priority();
         std::vector<std::vector<float>> vecs;
         std::string error;
         bool ok{true};
@@ -143,7 +144,10 @@ void CtMainWin::_semantic_on_done()
         for (size_t i = 0; i < batch.size(); ++i) _uSearchIndex->store_embedding(batch[i].chunk_id, vecs[i]);
     }
     const gint64 remaining = _uSearchIndex->count_pending_chunks();
-    if (remaining > 0) {
+    if (remaining > 0 and _pCtConfig->aiBackgroundPaused) {
+        _ctStatusBar.update_status(str::format(_("Semantic index paused: %s chunks remaining"), std::to_string(remaining)));
+    }
+    else if (remaining > 0) {
         _ctStatusBar.update_status(str::format(_("Semantic index: %s chunks remaining"), std::to_string(remaining)));
         // continue on the next idle so that the UI stays responsive
         Glib::signal_idle().connect_once([this](){ _semantic_start_batch(); }, Glib::PRIORITY_LOW);

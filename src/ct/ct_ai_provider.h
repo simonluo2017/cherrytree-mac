@@ -41,7 +41,12 @@ struct CtAiRequest
     int   max_tokens{1024};
     float temperature{0.4f};
     float top_p{0.9f};
+    bool  background{false}; // indexing work: fewer threads, low scheduling priority (energy)
 };
+
+/// Lower the scheduling priority of the calling thread for background AI work: on macOS the
+/// Utility QoS class moves it to the efficiency cores, elsewhere it is a nice() of the thread.
+void ct_ai_background_thread_priority();
 
 struct CtAiCapabilities
 {

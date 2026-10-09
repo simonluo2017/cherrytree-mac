@@ -250,6 +250,13 @@ bool CtAiProviderLlama::generate(const CtAiRequest& request,
 
     // fresh context for every request
     llama_memory_clear(llama_get_memory(_pCtx), true);
+    // background requests (knowledge graph extraction) leave cores to the user
+    {
+        const int hw_threads = static_cast<int>(std::thread::hardware_concurrency());
+        const int full = _settings.n_threads > 0 ? _settings.n_threads : std::max(1, hw_threads > 2 ? hw_threads - 2 : hw_threads);
+        const int n = request.background ? std::max(1, full / 2) : full;
+        llama_set_n_threads(_pCtx, n, n);
+    }
 
     // sampling chain
     llama_sampler* pSampler = llama_sampler_chain_init(llama_sampler_chain_default_params());

@@ -129,6 +129,8 @@ public:
     bool                                        semanticIndexEnabled{true};
     // knowledge graph: entities and relations extracted from the chunks by the generation model (background)
     bool                                        knowledgeGraphEnabled{false};
+    // pause the background AI work (semantic embedding, knowledge graph extraction), e.g. on battery
+    bool                                        aiBackgroundPaused{false};
     // generation backend: "llama" (GGUF file via llama.cpp) | "apple" (Apple Foundation Models, macOS 26+)
     //                     | "openai" (OpenAI compatible HTTP API such as a LiteLLM proxy)
     std::string                                 aiBackend{"llama"};

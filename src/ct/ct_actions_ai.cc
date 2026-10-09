@@ -105,6 +105,15 @@ void CtActions::_ai_run_prompt(const std::string& prompt_id, const std::map<std:
     }
 }
 
+void CtActions::ai_toggle_background()
+{
+    const bool paused = not _pCtConfig->aiBackgroundPaused;
+    for (CtMainWin* pWin : {_pCtMainWin}) pWin->ai_background_set_paused(paused);
+    CtDialogs::info_dialog(paused
+        ? _("Background AI work is paused: the semantic index and the knowledge graph stop until you resume them (Tools → AI → Pause/Resume Background AI Work). Your own requests still work.")
+        : _("Background AI work resumed."), *_pCtMainWin);
+}
+
 void CtActions::ai_toggle_graph_panel()
 {
     _pCtMainWin->graph_panel_show(not _pCtMainWin->graph_panel_visible());

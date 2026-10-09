@@ -513,6 +513,9 @@ void CtGraphPanel::_update_status()
     else if (running) {
         text += " · " + str::format(_("reading the notes, %s chunks left"), std::to_string(pending));
     }
+    else if (_pCtMainWin->get_ct_config()->aiBackgroundPaused) {
+        text += Glib::ustring{" · "} + _("background AI work is paused (Tools → AI)");
+    }
     else if (not enabled) {
         text += Glib::ustring{" · "} + _("press Build to extract the graph with the local model");
     }

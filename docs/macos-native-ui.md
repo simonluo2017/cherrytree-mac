@@ -142,6 +142,7 @@ Tools → AI (Local Model) → **Knowledge Graph**（Ctrl+Alt+G / ⌘⌥G）打�
 - **调度**：在全文索引和语义索引之后、程序空闲时一块一块跑（每块一次生成，temperature 0.1，最多 700 token）；用户发起 Ask / Summarize 时后台提取立即让路，回答结束后自动继续。节点内容改动后只重新提取变化的块，旧块的实体和关系随之删除，没有任何提及的实体被清理。状态栏显示 "Knowledge graph: N chunks to read"。
 - **面板**：上半部分是实体列表（按提及次数排序，按类型着色，可过滤，"This node" 只看当前节点的实体），下半部分画出选中实体的邻域（中心是它，周围一圈是有关系的实体，边上写关系名，点击邻居即切换过去），再往下是关系明细和 "Mentioned in" 节点列表，点节点跳转并选中实体名。按钮：Build（开启并开始/继续）、Pause、Rebuild（清空重来）。
 - 生成模型可以是 llama.cpp 的 GGUF，也可以是 Apple Intelligence；小模型（1.5B）的抽取质量一般，3B/7B 明显更好。
+- **能耗**：嵌入和图谱提取是后台重活，做完就停。它们用一半的 CPU 核心，线程在 macOS 上以 Utility QoS 运行（系统调度到能效核心）。想让风扇安静，Tools → AI → **Pause/Resume Background Work**（或 Preferences → AI 里的 "Pause Background AI Work"）一键暂停，自己发起的 Ask / Summarize 不受影响；恢复后从上次的位置继续。
 
 ## API 服务器后端（LiteLLM / OpenAI 兼容）
 

@@ -47,6 +47,24 @@ CtAiProviderOpenAI::Settings api_settings(const CtConfig* pConfig)
 }
 }
 
+#ifdef __APPLE__
+#include <pthread.h>
+#include <sys/qos.h>
+#else
+#include <sys/resource.h>
+#include <unistd.h>
+#endif
+
+void ct_ai_background_thread_priority()
+{
+#ifdef __APPLE__
+    pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
+#else
+    // per thread nice on Linux
+    setpriority(PRIO_PROCESS, 0, 10);
+#endif
+}
+
 CtAiService::CtAiService(CtConfig* pCtConfig)
  : _pCtConfig{pCtConfig}
  , _modelManager{pCtConfig}
@@ -217,7 +235,9 @@ void CtAiService::apply_settings()
             CtAiProviderLlama::Settings esettings;
             esettings.model_path = _pCtConfig->aiEmbeddingModelPath;
             esettings.n_ctx = 2048;
-            esettings.n_threads = _pCtConfig->aiThreads;
+            // background work: half of the cores unless the user fixed a thread count
+            esettings.n_threads = _pCtConfig->aiThreads > 0 ? _pCtConfig->aiThreads
+                                : std::max(1, static_cast<int>(std::thread::hardware_concurrency()) / 2);
             esettings.embedding = true;
             esettings.pooling = _pCtConfig->aiEmbeddingPooling;
             _uEmbeddingProvider = std::make_unique<CtAiProviderLlama>(esettings);
@@ -304,6 +324,7 @@ bool CtAiService::run(const CtAiRequest& request, PieceCallback on_piece, DoneCa
     CtAiProvider* pProvider = _uProvider.get();
     CtAiCancelToken cancel = _cancel;
     _worker = std::thread([this, pProvider, request, cancel](){
+        if (request.background) ct_ai_background_thread_priority();
         std::string error;
         bool ok = pProvider->is_loaded() or pProvider->load(error);
         if (ok and not (cancel and cancel->load())) {

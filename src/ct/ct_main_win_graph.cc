@@ -35,7 +35,7 @@ const int GRAPH_MAX_TOKENS{700};
 
 void CtMainWin::graph_extract_kick()
 {
-    if (not _uSearchIndex or not _pCtConfig->knowledgeGraphEnabled) return;
+    if (not _uSearchIndex or not _pCtConfig->knowledgeGraphEnabled or _pCtConfig->aiBackgroundPaused) return;
     if (_graphExtracting or _graphPaused) return;
     if (_graphFailures >= GRAPH_MAX_FAILURES) return; // stopped until the next explicit build
     CtAiService* pService = ai_service();
@@ -113,6 +113,7 @@ void CtMainWin::_graph_extract_next()
     CtAiRequest request = pService->build_request(*pPrompt, {{"title", title.raw()}, {"text", text.raw()}});
     request.max_tokens = std::min(request.max_tokens, GRAPH_MAX_TOKENS);
     request.temperature = 0.1f;
+    request.background = true;
     _graphChunkId = chunk.chunk_id;
     _graphNodeId = chunk.node_id;
     _graphOutput.clear();
@@ -157,6 +158,21 @@ void CtMainWin::_graph_on_done(const bool ok, const std::string& error)
     if (_pGraphPanel and _pGraphPanel->get_visible()) _pGraphPanel->refresh();
     if (_graphPaused) return;
     Glib::signal_idle().connect_once([this](){ _graph_extract_next(); }, Glib::PRIORITY_LOW);
+}
+
+void CtMainWin::ai_background_set_paused(const bool paused)
+{
+    _pCtConfig->aiBackgroundPaused = paused;
+    if (paused) {
+        graph_extract_pause();
+        _ctStatusBar.update_status(_("Background AI work paused (semantic index, knowledge graph)"));
+    }
+    else {
+        _ctStatusBar.update_status(_("Background AI work resumed"));
+        semantic_index_kick();
+        graph_extract_resume();
+    }
+    if (_pGraphPanel) _pGraphPanel->refresh();
 }
 
 void CtMainWin::_graph_update_status()

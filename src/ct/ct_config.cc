@@ -283,6 +283,7 @@ void CtConfig::_populate_keyfile_from_data()
     _uKeyFile->set_string(_currentGroup, "ai_embedding_query_prefix", aiEmbeddingQueryPrefix);
     _uKeyFile->set_boolean(_currentGroup, "semantic_index_enabled", semanticIndexEnabled);
     _uKeyFile->set_boolean(_currentGroup, "knowledge_graph_enabled", knowledgeGraphEnabled);
+    _uKeyFile->set_boolean(_currentGroup, "ai_background_paused", aiBackgroundPaused);
     _uKeyFile->set_string(_currentGroup, "ai_backend", aiBackend);
     _uKeyFile->set_string(_currentGroup, "ai_api_base_url", aiApiBaseUrl);
     _uKeyFile->set_string(_currentGroup, "ai_api_key", aiApiKey);
@@ -614,6 +615,7 @@ void CtConfig::_populate_data_from_keyfile()
     _populate_string_from_keyfile("ai_embedding_query_prefix", &aiEmbeddingQueryPrefix);
     _populate_bool_from_keyfile("semantic_index_enabled", &semanticIndexEnabled);
     _populate_bool_from_keyfile("knowledge_graph_enabled", &knowledgeGraphEnabled);
+    _populate_bool_from_keyfile("ai_background_paused", &aiBackgroundPaused);
     _populate_string_from_keyfile("ai_backend", &aiBackend);
     if (aiBackend != "apple" and aiBackend != "openai") aiBackend = "llama";
     _populate_string_from_keyfile("ai_api_base_url", &aiApiBaseUrl);
