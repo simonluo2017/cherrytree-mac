@@ -403,6 +403,20 @@ bool CtSearchIndex::store_embedding(const gint64 chunk_id, const std::vector<flo
     return true;
 }
 
+bool CtSearchIndex::mark_chunk_embedding_failed(const gint64 chunk_id)
+{
+    if (not _pDb) return false;
+    Stmt upd{_pDb, "UPDATE chunks SET embedded=2 WHERE chunk_id=?"};
+    if (not upd) return false;
+    upd.bind_int64(1, chunk_id);
+    return upd.step_done();
+}
+
+gint64 CtSearchIndex::count_failed_chunks() const
+{
+    return _count("SELECT count(*) FROM chunks WHERE embedded=2");
+}
+
 std::vector<CtSemanticResult> CtSearchIndex::semantic_search(const std::vector<float>& query, const int limit) const
 {
     std::vector<CtSemanticResult> ret;

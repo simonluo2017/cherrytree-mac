@@ -131,6 +131,9 @@ public:
     bool                                        knowledgeGraphEnabled{false};
     // pause the background AI work (semantic embedding, knowledge graph extraction), e.g. on battery
     bool                                        aiBackgroundPaused{false};
+    // pace of the background AI work: 0 = full speed, 1 = balanced (rest as long as the work took),
+    // 2 = quiet (rest three times as long): lower average power, no fan, slower indexing
+    int                                         aiBackgroundPace{1};
     // generation backend: "llama" (GGUF file via llama.cpp) | "apple" (Apple Foundation Models, macOS 26+)
     //                     | "openai" (OpenAI compatible HTTP API such as a LiteLLM proxy)
     std::string                                 aiBackend{"llama"};

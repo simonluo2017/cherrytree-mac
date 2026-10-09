@@ -200,6 +200,8 @@ public:
     void graph_rebuild();
     /// pause/resume every background AI job (semantic embedding, graph extraction); persisted in the config
     void ai_background_set_paused(const bool paused);
+    /// rest time (ms) after a background step that took work_us, from the configured pace
+    int ai_background_rest_ms(const gint64 work_us) const;
     CtGraphPanel* graph_panel() { return _pGraphPanel; }
     void graph_panel_show(const bool show);
     bool graph_panel_visible() const;
@@ -466,6 +468,8 @@ private:
     bool                         _graphExtracting{false};
     bool                         _graphPaused{false};
     gint64                       _graphChunkId{0};
+    gint64                       _graphChunkStart{0};
+    gint64                       _semanticBatchStart{0};
     gint64                       _graphNodeId{0};
     std::string                  _graphOutput;
     int                          _graphFailures{0};

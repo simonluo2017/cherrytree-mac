@@ -77,6 +77,7 @@ void CtMainWin::_semantic_start_batch()
     // not configured yet: the first batch is only a warm up that tells us the dimension
     if (_semanticWorker.joinable()) _semanticWorker.join();
     _semanticBusy = true;
+    _semanticBatchStart = g_get_monotonic_time();
     {
         std::lock_guard<std::mutex> lock{_semanticMutex};
         _semanticBatch = std::move(batch);
@@ -140,8 +141,25 @@ void CtMainWin::_semantic_on_done()
         _uSearchIndex->semantic_configure(pService->embedding_model_id(), dim);
         _semanticConfigured = true;
     }
-    if (batch.size() == vecs.size()) {
-        for (size_t i = 0; i < batch.size(); ++i) _uSearchIndex->store_embedding(batch[i].chunk_id, vecs[i]);
+    // store the vectors; a chunk whose vector cannot be stored (NaN, wrong dimension...) is
+    // given up, otherwise the same batch would be embedded again and again
+    const gint64 pending_before = _uSearchIndex->count_pending_chunks();
+    int failed{0};
+    for (size_t i = 0; i < batch.size(); ++i) {
+        const bool stored = i < vecs.size() and not vecs[i].empty() and _uSearchIndex->store_embedding(batch[i].chunk_id, vecs[i]);
+        if (not stored) {
+            ++failed;
+            _uSearchIndex->mark_chunk_embedding_failed(batch[i].chunk_id);
+            spdlog::warn("semantic index: chunk {} of node {} could not be embedded, skipped", batch[i].chunk_id, batch[i].node_id);
+        }
+    }
+    if (not batch.empty() and _uSearchIndex->count_pending_chunks() >= pending_before) {
+        // no progress at all: stop instead of spinning
+        for (const CtChunk& c : batch) _uSearchIndex->mark_chunk_embedding_failed(c.chunk_id);
+        spdlog::warn("semantic index: no progress on a batch of {} chunks, they are skipped", batch.size());
+    }
+    if (failed > 0) {
+        _ctStatusBar.update_status(str::format(_("Semantic index: %s chunks could not be embedded and were skipped"), std::to_string(_uSearchIndex->count_failed_chunks())));
     }
     const gint64 remaining = _uSearchIndex->count_pending_chunks();
     if (remaining > 0 and _pCtConfig->aiBackgroundPaused) {
@@ -149,8 +167,11 @@ void CtMainWin::_semantic_on_done()
     }
     else if (remaining > 0) {
         _ctStatusBar.update_status(str::format(_("Semantic index: %s chunks remaining"), std::to_string(remaining)));
-        // continue on the next idle so that the UI stays responsive
-        Glib::signal_idle().connect_once([this](){ _semantic_start_batch(); }, Glib::PRIORITY_LOW);
+        // continue on the next idle so that the UI stays responsive, after a rest proportional
+        // to the work done when a gentler pace is configured (energy / fan noise)
+        const int rest_ms = ai_background_rest_ms(g_get_monotonic_time() - _semanticBatchStart);
+        if (rest_ms > 0) Glib::signal_timeout().connect_once([this](){ _semantic_start_batch(); }, rest_ms);
+        else Glib::signal_idle().connect_once([this](){ _semantic_start_batch(); }, Glib::PRIORITY_LOW);
     }
     else if (not batch.empty()) {
         update_selected_node_statusbar_info();

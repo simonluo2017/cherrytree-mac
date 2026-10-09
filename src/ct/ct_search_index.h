@@ -151,6 +151,9 @@ public:
     gint64 count_pending_chunks() const;
     gint64 count_embedded_chunks() const;
     bool store_embedding(const gint64 chunk_id, const std::vector<float>& vec);
+    /// give up on a chunk whose vector cannot be stored (it is retried when its text changes or the model changes)
+    bool mark_chunk_embedding_failed(const gint64 chunk_id);
+    gint64 count_failed_chunks() const;
     /// nearest chunks to a query vector
     std::vector<CtSemanticResult> semantic_search(const std::vector<float>& query, const int limit) const;
     /// mean vector of a node's chunks (empty when none embedded)

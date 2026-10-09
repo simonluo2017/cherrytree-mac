@@ -118,6 +118,7 @@ void CtMainWin::_graph_extract_next()
     _graphNodeId = chunk.node_id;
     _graphOutput.clear();
     _graphExtracting = true;
+    _graphChunkStart = g_get_monotonic_time();
     const bool started = pService->run(request,
         [this](const std::string& piece){ _graphOutput += piece; },
         [this](const bool ok, const std::string& error){ _graph_on_done(ok, error); });
@@ -157,7 +158,10 @@ void CtMainWin::_graph_on_done(const bool ok, const std::string& error)
     }
     if (_pGraphPanel and _pGraphPanel->get_visible()) _pGraphPanel->refresh();
     if (_graphPaused) return;
-    Glib::signal_idle().connect_once([this](){ _graph_extract_next(); }, Glib::PRIORITY_LOW);
+    // rest between chunks according to the configured pace (energy / fan noise)
+    const int rest_ms = ai_background_rest_ms(g_get_monotonic_time() - _graphChunkStart);
+    if (rest_ms > 0) _graphRetryTimer = Glib::signal_timeout().connect([this](){ _graph_extract_next(); return false; }, rest_ms);
+    else Glib::signal_idle().connect_once([this](){ _graph_extract_next(); }, Glib::PRIORITY_LOW);
 }
 
 void CtMainWin::ai_background_set_paused(const bool paused)
@@ -173,6 +177,14 @@ void CtMainWin::ai_background_set_paused(const bool paused)
         graph_extract_resume();
     }
     if (_pGraphPanel) _pGraphPanel->refresh();
+}
+
+int CtMainWin::ai_background_rest_ms(const gint64 work_us) const
+{
+    const int factor = _pCtConfig->aiBackgroundPace == 2 ? 3 : (_pCtConfig->aiBackgroundPace == 1 ? 1 : 0);
+    if (factor == 0 or work_us <= 0) return 0;
+    const gint64 rest_ms = (work_us / 1000) * factor;
+    return static_cast<int>(std::min<gint64>(rest_ms, 15000));
 }
 
 void CtMainWin::_graph_update_status()

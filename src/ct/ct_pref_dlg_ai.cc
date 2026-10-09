@@ -91,6 +91,17 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     check_bg_pause->signal_toggled().connect([this, check_bg_pause](){
         apply_for_each_window([check_bg_pause](CtMainWin* win) { win->ai_background_set_paused(check_bg_pause->get_active()); });
     });
+    auto hbox_pace = Gtk::manage(new Gtk::Box{Gtk::ORIENTATION_HORIZONTAL, 4/*spacing*/});
+    auto label_pace = Gtk::manage(new Gtk::Label{_("Background AI Pace")});
+    auto combo_pace = Gtk::manage(new Gtk::ComboBoxText{});
+    combo_pace->append(_("Full speed (fastest indexing, fans may spin)"));
+    combo_pace->append(_("Balanced (works half of the time)"));
+    combo_pace->append(_("Quiet (works a quarter of the time, lowest power)"));
+    combo_pace->set_active(_pConfig->aiBackgroundPace);
+    combo_pace->set_hexpand(true);
+    combo_pace->signal_changed().connect([this, combo_pace](){ _pConfig->aiBackgroundPace = std::max(0, combo_pace->get_active_row_number()); });
+    hbox_pace->pack_start(*label_pace, false, false);
+    hbox_pace->pack_start(*combo_pace, true, true);
     auto check_graph = Gtk::manage(new Gtk::CheckButton{_("Build a Knowledge Graph of the Document (the generation model reads the notes in the background and extracts entities and relations; Tools → AI → Knowledge Graph)")});
     check_graph->set_active(_pConfig->knowledgeGraphEnabled);
     for (Gtk::CheckButton* pCheck : {check_semantic, check_graph, check_bg_pause}) {
@@ -112,6 +123,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     vbox_model->pack_start(*check_semantic, false, false);
     vbox_model->pack_start(*check_graph, false, false);
     vbox_model->pack_start(*check_bg_pause, false, false);
+    vbox_model->pack_start(*hbox_pace, false, false);
     vbox_model->pack_start(*button_unload, false, false);
     check_graph->signal_toggled().connect([this, check_graph](){
         _pConfig->knowledgeGraphEnabled = check_graph->get_active();
