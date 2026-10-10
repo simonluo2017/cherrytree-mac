@@ -470,6 +470,7 @@ private:
     int                          _semanticDim{0};
     bool                         _semanticOk{false};
     std::string                  _semanticError;
+    std::string                  _semanticLastError; // last failure shown in the status label, empty when fine
     void _semantic_on_done();
     void _semantic_start_batch();
     // knowledge graph extraction: one chunk per generation, on the AI service worker

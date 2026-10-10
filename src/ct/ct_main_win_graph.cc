@@ -226,11 +226,13 @@ void CtMainWin::ai_status_refresh()
         if (not pService or not pService->is_embedding_configured()) state = _("no model");
         else if (_pCtConfig->semanticIndexPaused and pending > 0) state = _("paused");
         else if (_semanticBusy) state = _("running");
+        else if (pending > 0 and not _semanticLastError.empty()) state = _("error");
         Glib::ustring part = str::format(_("embed %s/%s"), std::to_string(done), std::to_string(total));
         if (not state.empty()) part += " (" + state + ")";
         parts.push_back(part);
         Glib::ustring tip = _("Semantic index: chunks embedded / chunks of the document");
         if (failed > 0) tip += "\n" + str::format(_("%s chunks could not be embedded and were skipped"), std::to_string(failed));
+        if (state == _("error")) tip += "\n" + str::format(_("Stopped: %s\nFix the embedding model in Preferences → AI; the index resumes by itself."), _semanticLastError);
         if (state == _("no model")) tip += "\n" + Glib::ustring{_("No embedding model: pick one in Preferences → AI (Model Catalog → Qwen3 Embedding → Use This Model)")};
         tips.push_back(tip);
     }

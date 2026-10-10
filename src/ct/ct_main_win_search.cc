@@ -133,11 +133,13 @@ void CtMainWin::_semantic_on_done()
     _semanticBusy = false;
     if (not _uSearchIndex) return;
     if (not ok) {
+        _semanticLastError = error;
         ai_status_refresh();
         spdlog::warn("semantic index: {}", error);
         _ctStatusBar.update_status(str::format(_("Semantic index: %s"), error));
         return; // stop until the next trigger
     }
+    _semanticLastError.clear();
     CtAiService* pService = ai_service();
     if (not _semanticConfigured and dim > 0) {
         _uSearchIndex->semantic_configure(pService->embedding_model_id(), dim);
