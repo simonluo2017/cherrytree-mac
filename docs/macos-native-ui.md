@@ -80,6 +80,8 @@ Search → **Search Notebook Panel**（Ctrl+Alt+F / ⌘⌥F）在编辑区右侧
 
 ### 语义检索（Embedding + sqlite-vec）
 
+> macOS 自带的 SQLite 没有可加载扩展支持，所以 sqlite-vec 以 `SQLITE_CORE` 方式编译并在每个索引连接打开时显式初始化（不依赖 `sqlite3_auto_extension`）；向量表建不出来时嵌入会停止并在状态栏标签显示 `(error)`。
+
 在同一个 `.ai-index.sqlite` 里增加了向量索引（vendor 进仓库的 sqlite-vec，`third_party/sqlite-vec`）。
 
 - **嵌入模型**：Preferences → AI (Local Model) 目录里 tier 为 `embedding` 的条目（默认推荐 Qwen 官方 **Qwen3 Embedding 0.6B**，中英多语言，1024 维；备选 Nomic Embed Text v1.5）。下载后选中 → Use This Model，它会填入 "Embedding Model (GGUF)" 一栏并带上该模型的 pooling 与查询前缀。嵌入模型与生成模型各自独立加载/卸载。
