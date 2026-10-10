@@ -248,6 +248,7 @@ void CtMainWin::search_index_enqueue_all(const bool force)
     }
     _searchIndexQueueTotal = _searchIndexQueue.size();
     _search_index_start_idle();
+    ai_status_refresh();
 }
 
 void CtMainWin::search_index_rebuild()
