@@ -269,9 +269,10 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     pTreeView->append_column(_("Tier"), pColumns->tier);
     pTreeView->append_column(_("Size"), pColumns->size);
     pTreeView->append_column(_("Status"), pColumns->status);
-    pTreeView->set_size_request(-1, 110);
+    // the catalog is short: show every entry, the whole tab scrolls instead
     auto pScrolled = Gtk::manage(new Gtk::ScrolledWindow{});
-    pScrolled->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_AUTOMATIC);
+    pScrolled->set_policy(Gtk::POLICY_AUTOMATIC, Gtk::POLICY_NEVER);
+    pScrolled->set_propagate_natural_height(true);
     pScrolled->add(*pTreeView);
     auto label_detail = Gtk::manage(new Gtk::Label{});
     label_detail->set_xalign(0.0);
@@ -449,7 +450,7 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     pMainBox->set_margin_start(6);
     pMainBox->set_margin_top(6);
 #if GTKMM_MAJOR_VERSION < 4
-    pMainBox->pack_start(*frame_catalog, true, true);
+    pMainBox->pack_start(*frame_catalog, false, false);
     pMainBox->pack_start(*frame_model, false, false);
     pMainBox->pack_start(*frame_api, false, false);
     pMainBox->pack_start(*frame_gen, false, false);
