@@ -26,7 +26,10 @@
 #include "ct_macos_app.h"
 #include <glib.h>
 #include <gdk/gdk.h>
+// the header has no extern "C" guard: in Objective-C++ the symbol would get C++ linkage
+extern "C" {
 #include <gdk/quartz/gdkquartz-cocoa-access.h>
+}
 #include <dlfcn.h>
 
 namespace {
