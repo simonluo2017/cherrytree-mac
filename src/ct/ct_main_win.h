@@ -361,6 +361,9 @@ private:
 #endif
 
     void _on_treeview_cursor_changed(); // pygtk: on_node_changed
+#ifdef __APPLE__
+    bool _on_window_key_press_event_after(GdkEventKey* event);
+#endif
 #if GTKMM_MAJOR_VERSION < 4
     bool _on_treeview_button_release_event(GdkEventButton* event);
     void _on_treeview_event_after(GdkEvent* event); // pygtk: on_event_after_tree

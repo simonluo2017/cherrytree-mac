@@ -25,6 +25,9 @@
 #import <Cocoa/Cocoa.h>
 #include "ct_macos_app.h"
 #include <glib.h>
+#include <gdk/gdk.h>
+#include <gdk/quartz/gdkquartz-cocoa-access.h>
+#include <dlfcn.h>
 
 namespace {
 std::function<void()> g_onQuit;
@@ -80,6 +83,45 @@ gboolean run_quit_flow(gpointer)
 }
 
 @end
+
+bool ct_macos_lock_screen()
+{
+    // the lock screen entry point of the system login framework (what the menu bar lock uses)
+    static int (*lock_now)() = nullptr;
+    static bool looked_up = false;
+    if (not looked_up) {
+        looked_up = true;
+        void* handle = dlopen("/System/Library/PrivateFrameworks/login.framework/login", RTLD_LAZY);
+        if (handle) lock_now = reinterpret_cast<int(*)()>(dlsym(handle, "SACLockScreenImmediate"));
+    }
+    if (lock_now) {
+        lock_now();
+        return true;
+    }
+    // fallback: start the screen saver, which locks when the system is set to ask for the password
+    return [[NSWorkspace sharedWorkspace] launchApplication:@"ScreenSaverEngine"];
+}
+
+bool ct_macos_forward_unhandled_key(void* gdk_event_key)
+{
+    // GDK translates every key press itself and never passes it to [NSApp sendEvent:], so
+    // Cocoa never sees the shortcuts GTK did not consume: system ones (Control+Command+Q
+    // lock screen...) and those only known to the native menu bar. Re-dispatch the original
+    // NSEvent through Cocoa. Only Command combinations are forwarded: plain keys would go
+    // through the text input path a second time.
+    static bool forwarding = false;
+    if (forwarding) return false;
+    auto* pEvent = static_cast<GdkEventKey*>(gdk_event_key);
+    if (not pEvent or pEvent->type != GDK_KEY_PRESS) return false;
+    if (not (pEvent->state & (GDK_META_MASK | GDK_MOD2_MASK))) return false;
+    NSEvent* nsevent = gdk_quartz_event_get_nsevent(reinterpret_cast<GdkEvent*>(pEvent));
+    if (not nsevent or [nsevent type] != NSEventTypeKeyDown) return false;
+    if (not ([nsevent modifierFlags] & NSEventModifierFlagCommand)) return false;
+    forwarding = true;
+    [NSApp sendEvent:nsevent];
+    forwarding = false;
+    return true;
+}
 
 static CtMacAppDelegate* g_delegate = nil;
 

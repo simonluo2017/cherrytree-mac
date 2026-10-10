@@ -26,3 +26,12 @@
 /// Make the Quit Apple event (Dock > Quit, logout, shutdown) call on_quit on the GLib
 /// main loop instead of terminating the process; call once after GTK is initialised.
 void ct_macos_install_quit_handler(std::function<void()> on_quit);
+
+/// Lock the screen like the system Control+Command+Q shortcut (GTK keeps that key event
+/// for itself, so the application triggers the lock); returns false when not possible.
+bool ct_macos_lock_screen();
+
+/// Hand a key press that GTK did not use back to Cocoa (menu key equivalents of the native
+/// menu bar, system shortcuts such as the lock screen); call it from an "after" key press
+/// handler of the toplevel. Returns true when the event was forwarded.
+bool ct_macos_forward_unhandled_key(void* gdk_event_key);

@@ -331,6 +331,10 @@ CtMainWin::CtMainWin(bool                            no_gui,
 
 #if GTKMM_MAJOR_VERSION < 4
     signal_key_press_event().connect(sigc::mem_fun(*this, &CtMainWin::_on_window_key_press_event), false);
+#ifdef __APPLE__
+    // key presses nobody in GTK handled are handed back to Cocoa (system shortcuts)
+    signal_key_press_event().connect(sigc::mem_fun(*this, &CtMainWin::_on_window_key_press_event_after), true/*after*/);
+#endif
     signal_show().connect([this](){
         auto rGdkWin = this->get_window();
         if (rGdkWin) {

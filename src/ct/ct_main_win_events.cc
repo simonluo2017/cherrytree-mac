@@ -24,6 +24,9 @@
 #include "ct_main_win.h"
 #include "ct_actions.h"
 #include "ct_graph_panel.h"
+#ifdef __APPLE__
+#include "ct_macos_app.h"
+#endif
 #include "ct_list.h"
 
 void CtMainWin::_on_treeview_cursor_changed()
@@ -108,6 +111,20 @@ bool CtMainWin::_on_treeview_button_release_event(GdkEventButton* event)
 
 #if GTKMM_MAJOR_VERSION >= 4
 // GTK4: treeview button release handled by controllers; no legacy handler
+#endif
+
+#ifdef __APPLE__
+// runs after every GTK handler declined the key press: give Cocoa / the system a chance
+bool CtMainWin::_on_window_key_press_event_after(GdkEventKey* event)
+{
+    // Control+Command+Q = lock screen; triggered directly, forwarding is the general path
+    if ((event->keyval == GDK_KEY_q or event->keyval == GDK_KEY_Q) and
+        (event->state & GDK_CONTROL_MASK) and (event->state & (GDK_META_MASK | GDK_MOD2_MASK)))
+    {
+        if (ct_macos_lock_screen()) return true;
+    }
+    return ct_macos_forward_unhandled_key(event);
+}
 #endif
 
 bool CtMainWin::_on_window_key_press_event(GdkEventKey* event)
