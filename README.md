@@ -38,6 +38,40 @@ Written by Giuseppe Penone (aka giuspen) and Evgenii Gurianov (aka txe).
 - Automatic link to web page if writing the URL
 - Automatic link to node if writing node name surrounded by [[node name]]
 
+## cherrytree-mac: this fork
+This repository is a macOS oriented fork of CherryTree: a native feeling Mac app with a
+privacy first, local AI knowledge workbench on top. Everything below is documented in detail
+(in Chinese) in [docs/macos-native-ui.md](docs/macos-native-ui.md); the roadmap and its status
+are in [docs/roadmap.md](docs/roadmap.md).
+
+### macOS native experience
+- Self contained `cherrytree-mac.app` and `.dmg` built by `scripts/macos_make_app_dmg.sh` from the local Homebrew installation (the script never downloads anything)
+- Native application menu bar with ⌘ shortcuts next to the classic Ctrl ones, system appearance (dark mode), native window chrome
+- macOS input methods (Chinese, Japanese, Korean) work, including switching the input method with Shift; system shortcuts such as Control+⌘+Q (lock screen) and Control+⌘+F (full screen) work while the editor has the focus
+- Dock > Quit, logout and shutdown go through CherryTree's own quit flow (unsaved changes are asked about); quitting with a loaded model no longer aborts
+- TextMate style editor look (light / dark colour schemes), column selection (Option+drag, Option+Shift+arrows)
+- Markdown and Remarkup (Phabricator / Phorge) nodes with a rendered preview and local object references (`T123`, `D45`, `{F7}`, `@user`)
+
+### Local knowledge engine
+- Full text search index (SQLite FTS5, CJK aware) kept next to the document as `<name>.ai-index.sqlite`, incremental, with a search panel (Ctrl+Alt+F / ⌘⌥F)
+- Semantic search: the notes are chunked and embedded in the background (sqlite-vec vectors), Keyword / Semantic / Hybrid modes, Related Notes
+- Knowledge graph: entities and relations extracted from the notes by the generation model, with provenance; graph panel (Ctrl+Alt+G / ⌘⌥G) with entity list, neighbourhood drawing, relations and the notes mentioning an entity
+- Ask Notebook (Ctrl+Alt+N / ⌘⌥N): retrieval augmented answers over the whole document, hybrid retrieval (keyword + semantic + graph), answers cite numbered sources that jump to the note
+- Ask This Node (Ctrl+Alt+A / ⌘⌥A), Summarize, Explain, Extract Tasks, Suggest Tags on the selection or the current node, streamed into a side panel; the AI never edits a note by itself
+- Everything is derived data: the index can be deleted or rebuilt at any time, the notes are never modified
+
+### AI backends
+- Local GGUF models through a vendored, pinned llama.cpp (Metal on Apple Silicon); embedding models for the semantic index
+- In-app Model Manager: a catalog of official publisher releases (Qwen2.5 Instruct 1.5B / 3B / 7B, Qwen3-Embedding, nomic-embed), one click download with resume and SHA256 verification, source and license shown before downloading
+- Apple Intelligence (Apple Foundation Models, macOS 26+) through a small Swift bridge loaded at runtime
+- Any OpenAI compatible API server (for example a LiteLLM proxy): chat models and optional embedding models; off by default and clearly marked as sending text to the server
+- Energy controls: background work runs on half of the cores at low priority, a Balanced / Quiet pace, separate pause switches for the embedding and the graph extraction, and a permanent status bar label with the progress of the index, the embedding and the graph
+
+### Supply chain
+- Third party C/C++ code (llama.cpp, sqlite-vec) is vendored as source with pinned commits (`third_party/*/VENDOR.md`)
+- Model files come only from the publishers' official Hugging Face repositories listed in `data/models.manifest`, verified against SHA256 hashes pinned in the catalog
+- Cloud AI is off by default; apart from model downloads started by the user, nothing leaves the machine unless an API server backend is configured
+
 ## Prebuilt binaries
 Prebuilt binaries can be found on [github.com/giuspen/cherrytree/releases](https://github.com/giuspen/cherrytree/releases) and [giuspen.net/cherrytree/#downl](https://www.giuspen.net/cherrytree/#downl).
 
