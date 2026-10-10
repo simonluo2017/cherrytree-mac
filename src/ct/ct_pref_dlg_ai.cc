@@ -524,5 +524,21 @@ Gtk::Widget* CtPrefDlg::build_tab_ai()
     spin_threads->signal_value_changed().connect([this, spin_threads, f_apply](){ _pConfig->aiThreads = spin_threads->get_value_as_int(); f_apply(); });
     spin_unload->signal_value_changed().connect([this, spin_unload](){ _pConfig->aiUnloadMinutes = spin_unload->get_value_as_int(); });
 
-    return pMainBox;
+    // the tab is tall: scroll it instead of growing the dialog beyond the screen (the window
+    // could then neither be moved nor resized); wrapped labels get a width bound for the same reason
+    for (Gtk::Label* pLabel : {label_intro, label_backend_status, label_machine, label_detail, label_api_warn, label_api_status, label_prompts, label_download_status}) {
+        pLabel->set_max_width_chars(110);
+    }
+    for (Gtk::CheckButton* pCheck : {check_semantic, check_graph, check_bg_pause, check_graph_pause}) {
+        if (auto pLabel = dynamic_cast<Gtk::Label*>(pCheck->get_child())) pLabel->set_max_width_chars(110);
+    }
+    auto pScrolledTab = Gtk::manage(new Gtk::ScrolledWindow{});
+    pScrolledTab->set_policy(Gtk::POLICY_NEVER, Gtk::POLICY_AUTOMATIC);
+    pScrolledTab->set_propagate_natural_width(true);
+    pScrolledTab->set_propagate_natural_height(true);
+    pScrolledTab->set_min_content_height(400);
+    pScrolledTab->set_max_content_height(640);
+    pScrolledTab->add(*pMainBox);
+    pScrolledTab->show_all();
+    return pScrolledTab;
 }
