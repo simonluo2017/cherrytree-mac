@@ -35,3 +35,9 @@ bool ct_macos_lock_screen();
 /// menu bar, system shortcuts such as the lock screen); call it from an "after" key press
 /// handler of the toplevel. Returns true when the event was forwarded.
 bool ct_macos_forward_unhandled_key(void* gdk_event_key);
+
+/// Called before GTK sees a key press / release. Modifier-only events (Shift, Caps Lock...)
+/// are passed to the active input method, which GDK never does: input methods that toggle
+/// Chinese/English with Shift need them. Returns true when a Control+Command system
+/// shortcut was handled here (lock screen) or forwarded to Cocoa, so GTK must not see it.
+bool ct_macos_handle_system_key(void* gdk_event_key, bool is_press);

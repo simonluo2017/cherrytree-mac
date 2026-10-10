@@ -119,6 +119,7 @@ void CtMainWin::_graph_extract_next()
     _graphOutput.clear();
     _graphExtracting = true;
     _graphChunkStart = g_get_monotonic_time();
+    ai_status_refresh();
     const bool started = pService->run(request,
         [this](const std::string& piece){ _graphOutput += piece; },
         [this](const bool ok, const std::string& error){ _graph_on_done(ok, error); });
@@ -157,6 +158,7 @@ void CtMainWin::_graph_on_done(const bool ok, const std::string& error)
         if (_graphFailures >= GRAPH_MAX_FAILURES) return;
     }
     if (_pGraphPanel and _pGraphPanel->get_visible()) _pGraphPanel->refresh();
+    ai_status_refresh();
     if (_graphPaused) return;
     // rest between chunks according to the configured pace (energy / fan noise)
     const int rest_ms = ai_background_rest_ms(g_get_monotonic_time() - _graphChunkStart);
@@ -176,6 +178,7 @@ void CtMainWin::graph_extract_set_paused(const bool paused)
         graph_extract_resume();
     }
     if (_pGraphPanel) _pGraphPanel->refresh();
+    ai_status_refresh();
 }
 
 void CtMainWin::semantic_index_set_paused(const bool paused)
@@ -190,6 +193,64 @@ void CtMainWin::semantic_index_set_paused(const bool paused)
         semantic_index_kick();
     }
     if (_pSearchPanel) _pSearchPanel->refresh();
+    ai_status_refresh();
+}
+
+void CtMainWin::ai_status_refresh()
+{
+#if GTKMM_MAJOR_VERSION < 4
+    Gtk::Label& label = _ctStatusBar.aiStatus;
+    if (not _uSearchIndex) {
+        label.hide();
+        return;
+    }
+    std::vector<Glib::ustring> parts;
+    std::vector<Glib::ustring> tips;
+    // full text index
+    if (_searchIndexQueueTotal > 0 and not _searchIndexQueue.empty()) {
+        parts.push_back(str::format(_("index %s/%s"), std::to_string(_searchIndexQueueTotal - _searchIndexQueue.size()), std::to_string(_searchIndexQueueTotal)));
+        tips.push_back(_("Full text index: nodes indexed so far / nodes to index"));
+    }
+    else {
+        parts.push_back(str::format(_("index %s"), std::to_string(_uSearchIndex->count_nodes())));
+        tips.push_back(_("Full text index: number of indexed nodes (up to date)"));
+    }
+    // semantic index (embedding)
+    if (_pCtConfig->semanticIndexEnabled) {
+        const gint64 pending = _uSearchIndex->count_pending_chunks();
+        const gint64 done = _uSearchIndex->count_embedded_chunks();
+        const gint64 failed = _uSearchIndex->count_failed_chunks();
+        const gint64 total = pending + done + failed;
+        const CtAiService* pService = _uAiService.get();
+        Glib::ustring state;
+        if (not pService or not pService->is_embedding_configured()) state = _("no model");
+        else if (_pCtConfig->semanticIndexPaused and pending > 0) state = _("paused");
+        else if (_semanticBusy) state = _("running");
+        Glib::ustring part = str::format(_("embed %s/%s"), std::to_string(done), std::to_string(total));
+        if (not state.empty()) part += " (" + state + ")";
+        parts.push_back(part);
+        Glib::ustring tip = _("Semantic index: chunks embedded / chunks of the document");
+        if (failed > 0) tip += "\n" + str::format(_("%s chunks could not be embedded and were skipped"), std::to_string(failed));
+        if (state == _("no model")) tip += "\n" + Glib::ustring{_("No embedding model: pick one in Preferences → AI (Model Catalog → Qwen3 Embedding → Use This Model)")};
+        tips.push_back(tip);
+    }
+    // knowledge graph
+    if (_pCtConfig->knowledgeGraphEnabled) {
+        const gint64 pending = _uSearchIndex->graph_count_pending();
+        const gint64 done = _uSearchIndex->graph_count_extracted();
+        Glib::ustring state;
+        if (_pCtConfig->knowledgeGraphPaused and pending > 0) state = _("paused");
+        else if (_graphExtracting) state = _("running");
+        Glib::ustring part = str::format(_("graph %s/%s"), std::to_string(done), std::to_string(pending + done));
+        if (not state.empty()) part += " (" + state + ")";
+        parts.push_back(part);
+        tips.push_back(str::format(_("Knowledge graph: chunks read by the model / chunks of the document · %s entities, %s relations"),
+                                   std::to_string(_uSearchIndex->graph_count_entities()), std::to_string(_uSearchIndex->graph_count_relations())));
+    }
+    label.set_text("AI: " + str::join(parts, " · "));
+    label.set_tooltip_text(str::join(tips, "\n"));
+    label.show();
+#endif
 }
 
 int CtMainWin::ai_background_rest_ms(const gint64 work_us) const

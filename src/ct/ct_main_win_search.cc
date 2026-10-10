@@ -78,6 +78,7 @@ void CtMainWin::_semantic_start_batch()
     if (_semanticWorker.joinable()) _semanticWorker.join();
     _semanticBusy = true;
     _semanticBatchStart = g_get_monotonic_time();
+    ai_status_refresh();
     {
         std::lock_guard<std::mutex> lock{_semanticMutex};
         _semanticBatch = std::move(batch);
@@ -132,6 +133,7 @@ void CtMainWin::_semantic_on_done()
     _semanticBusy = false;
     if (not _uSearchIndex) return;
     if (not ok) {
+        ai_status_refresh();
         spdlog::warn("semantic index: {}", error);
         _ctStatusBar.update_status(str::format(_("Semantic index: %s"), error));
         return; // stop until the next trigger
@@ -162,6 +164,7 @@ void CtMainWin::_semantic_on_done()
         _ctStatusBar.update_status(str::format(_("Semantic index: %s chunks could not be embedded and were skipped"), std::to_string(_uSearchIndex->count_failed_chunks())));
     }
     const gint64 remaining = _uSearchIndex->count_pending_chunks();
+    ai_status_refresh();
     if (remaining > 0 and _pCtConfig->semanticIndexPaused) {
         _ctStatusBar.update_status(str::format(_("Semantic index paused: %s chunks remaining"), std::to_string(remaining)));
     }
@@ -221,6 +224,7 @@ void CtMainWin::search_index_close()
     _searchIndexQueueTotal = 0;
     _uSearchIndex.reset();
     if (_pSearchPanel) _pSearchPanel->refresh();
+    ai_status_refresh();
 }
 
 void CtMainWin::search_index_enqueue_all(const bool force)
@@ -328,6 +332,7 @@ bool CtMainWin::_search_index_idle_tick()
         }
     }
     const size_t remaining = _searchIndexQueue.size();
+    ai_status_refresh();
     if (remaining > 0 and _searchIndexQueueTotal > 20) {
         _ctStatusBar.update_status(str::format(_("Indexing for search: %s of %s nodes"),
                                                std::to_string(_searchIndexQueueTotal - remaining),

@@ -123,6 +123,38 @@ bool ct_macos_forward_unhandled_key(void* gdk_event_key)
     return true;
 }
 
+bool ct_macos_handle_system_key(void* gdk_event_key, bool is_press)
+{
+    auto* pEvent = static_cast<GdkEventKey*>(gdk_event_key);
+    if (not pEvent) return false;
+    NSEvent* nsevent = gdk_quartz_event_get_nsevent(reinterpret_cast<GdkEvent*>(pEvent));
+    if (not nsevent) return false;
+    if ([nsevent type] == NSEventTypeFlagsChanged) {
+        // a modifier alone: let the input method see it (Shift toggles Chinese/English in
+        // many input methods); GDK's view ignores flagsChanged
+        NSTextInputContext* context = [NSTextInputContext currentInputContext];
+        if (context) [context handleEvent:nsevent];
+        return false; // GTK still gets the modifier press/release
+    }
+    if (not is_press or [nsevent type] != NSEventTypeKeyDown) return false;
+    const NSEventModifierFlags flags = [nsevent modifierFlags];
+    if (not ((flags & NSEventModifierFlagCommand) and (flags & NSEventModifierFlagControl))) return false;
+    // Control+Command combinations are system shortcuts, CherryTree binds none of them
+    if (pEvent->keyval == GDK_KEY_q or pEvent->keyval == GDK_KEY_Q) {
+        ct_macos_lock_screen();
+        return true;
+    }
+    if (pEvent->keyval == GDK_KEY_f or pEvent->keyval == GDK_KEY_F) {
+        return false; // full screen: handled by the window (toggle_fullscreen)
+    }
+    static bool forwarding = false;
+    if (forwarding) return false;
+    forwarding = true;
+    [NSApp sendEvent:nsevent];
+    forwarding = false;
+    return true;
+}
+
 static CtMacAppDelegate* g_delegate = nil;
 
 void ct_macos_install_quit_handler(std::function<void()> on_quit)

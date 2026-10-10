@@ -334,6 +334,7 @@ CtMainWin::CtMainWin(bool                            no_gui,
 #ifdef __APPLE__
     // key presses nobody in GTK handled are handed back to Cocoa (system shortcuts)
     signal_key_press_event().connect(sigc::mem_fun(*this, &CtMainWin::_on_window_key_press_event_after), true/*after*/);
+    signal_key_release_event().connect(sigc::mem_fun(*this, &CtMainWin::_on_window_key_release_event_before), false);
 #endif
     signal_show().connect([this](){
         auto rGdkWin = this->get_window();
@@ -1011,6 +1012,10 @@ Gtk::Box& CtMainWin::_init_status_bar()
     _ctStatusBar.stopButton.set_image_from_icon_name("ct_stop", Gtk::ICON_SIZE_MENU);
     _ctStatusBar.hbox.pack_start(_ctStatusBar.cursorPos, false, false);
     _ctStatusBar.hbox.pack_start(_ctStatusBar.statusBar, true, true);
+    _ctStatusBar.aiStatus.get_style_context()->add_class("dim-label");
+    _ctStatusBar.aiStatus.set_margin_end(8);
+    _ctStatusBar.aiStatus.set_no_show_all(true);
+    _ctStatusBar.hbox.pack_start(_ctStatusBar.aiStatus, false, false);
     _ctStatusBar.hbox.pack_start(_ctStatusBar.frame, false, true);
     _ctStatusBar.hbox.pack_start(_ctStatusBar.stopButton, false, true);
     #endif

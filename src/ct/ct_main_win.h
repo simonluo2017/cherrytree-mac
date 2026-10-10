@@ -55,6 +55,7 @@ struct CtStatusBar
     Gtk::Label       cursorPos;
     guint            statusId;
     Gtk::ProgressBar progressBar;
+    Gtk::Label       aiStatus;     // permanent: progress of the background AI work (index, embedding, graph)
     Gtk::Button      stopButton;
     Gtk::Frame       frame;
     Gtk::Box         hbox{Gtk::ORIENTATION_HORIZONTAL};
@@ -204,6 +205,8 @@ public:
     void graph_extract_set_paused(const bool paused);
     /// rest time (ms) after a background step that took work_us, from the configured pace
     int ai_background_rest_ms(const gint64 work_us) const;
+    /// refresh the permanent status bar label with the progress of index / embedding / graph
+    void ai_status_refresh();
     CtGraphPanel* graph_panel() { return _pGraphPanel; }
     void graph_panel_show(const bool show);
     bool graph_panel_visible() const;
@@ -363,6 +366,7 @@ private:
     void _on_treeview_cursor_changed(); // pygtk: on_node_changed
 #ifdef __APPLE__
     bool _on_window_key_press_event_after(GdkEventKey* event);
+    bool _on_window_key_release_event_before(GdkEventKey* event);
 #endif
 #if GTKMM_MAJOR_VERSION < 4
     bool _on_treeview_button_release_event(GdkEventButton* event);

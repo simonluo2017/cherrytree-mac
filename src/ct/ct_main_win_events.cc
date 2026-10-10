@@ -127,8 +127,27 @@ bool CtMainWin::_on_window_key_press_event_after(GdkEventKey* event)
 }
 #endif
 
+#ifdef __APPLE__
+bool CtMainWin::_on_window_key_release_event_before(GdkEventKey* event)
+{
+    ct_macos_handle_system_key(event, false/*is_press*/);
+    return false;
+}
+#endif
+
 bool CtMainWin::_on_window_key_press_event(GdkEventKey* event)
 {
+#ifdef __APPLE__
+    // system shortcuts (Control+Command+...) and modifier-only events, before any widget
+    // (the text view would otherwise swallow them through the input method)
+    if (ct_macos_handle_system_key(event, true/*is_press*/)) return true;
+    if ((event->keyval == GDK_KEY_f or event->keyval == GDK_KEY_F) and
+        (event->state & GDK_CONTROL_MASK) and (event->state & (GDK_META_MASK | GDK_MOD2_MASK)))
+    {
+        _uCtActions->toggle_fullscreen(); // Control+Command+F like any macOS window
+        return true;
+    }
+#endif
     // column selection keys (Alt/Option+Shift+arrows) take precedence over the window
     // accelerators (node moves) while a text view has the focus
     if (CtTextView* pCtTextView = CtTextView::from_widget(get_focus())) {
