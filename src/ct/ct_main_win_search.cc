@@ -142,8 +142,20 @@ void CtMainWin::_semantic_on_done()
     _semanticLastError.clear();
     CtAiService* pService = ai_service();
     if (not _semanticConfigured and dim > 0) {
-        _uSearchIndex->semantic_configure(pService->embedding_model_id(), dim);
+        if (not _uSearchIndex->semantic_configure(pService->embedding_model_id(), dim)) {
+            _semanticLastError = "vector table (sqlite-vec): " + _uSearchIndex->last_error();
+            spdlog::error("semantic index: {}", _semanticLastError);
+            _ctStatusBar.update_status(str::format(_("Semantic index: %s"), _semanticLastError));
+            ai_status_refresh();
+            return; // stop: nothing can be stored
+        }
         _semanticConfigured = true;
+    }
+    if (not batch.empty() and not _uSearchIndex->semantic_ready()) {
+        _semanticLastError = "vector table (sqlite-vec) is missing";
+        spdlog::error("semantic index: {}", _semanticLastError);
+        ai_status_refresh();
+        return; // stop instead of giving up on the chunks
     }
     // store the vectors; a chunk whose vector cannot be stored (NaN, wrong dimension...) is
     // given up, otherwise the same batch would be embedded again and again

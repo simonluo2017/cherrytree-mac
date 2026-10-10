@@ -135,6 +135,10 @@ public:
     // ---- semantic index (chunks + sqlite-vec vectors), see docs
     /// set the embedding model; a different model/dimension than the stored one drops the vectors
     bool semantic_configure(const std::string& model_name, const int dim);
+    /// the vector table exists (vectors can be stored and searched)
+    bool semantic_ready() const;
+    /// text of the last failed SQL statement
+    std::string last_error() const;
     std::string semantic_model_name() const;
     int semantic_dim() const;
     /// split a node text into overlapping chunks (the node name is prefixed to each)
@@ -216,4 +220,5 @@ private:
 
     sqlite3* _pDb{nullptr};
     fs::path _path;
+    std::string _lastError;
 };

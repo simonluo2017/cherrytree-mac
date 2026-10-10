@@ -58,6 +58,7 @@ bool CtSearchIndex::_exec(const char* sql, std::string* pError)
         const std::string err = pErrMsg ? pErrMsg : "unknown error";
         sqlite3_free(pErrMsg);
         spdlog::error("search index: '{}': {}", sql, err);
+        _lastError = err;
         if (pError) *pError = err;
         return false;
     }
@@ -69,7 +70,21 @@ bool CtSearchIndex::_exec(const char* sql, std::string* pError)
     static bool registered{false};
     if (registered) return;
     registered = true;
+    // kept for the tests; the index registers the module explicitly on every connection
+    // (see open()), which does not depend on the auto extension mechanism of the library
     sqlite3_auto_extension(reinterpret_cast<void(*)(void)>(sqlite3_vec_init));
+}
+
+bool CtSearchIndex::semantic_ready() const
+{
+    if (not _pDb) return false;
+    Stmt stmt{_pDb, "SELECT name FROM sqlite_master WHERE type='table' AND name='vec_chunks'"};
+    return stmt and stmt.step_row();
+}
+
+std::string CtSearchIndex::last_error() const
+{
+    return _lastError;
 }
 
 bool CtSearchIndex::open(const fs::path& index_path, std::string* pError)
@@ -82,6 +97,14 @@ bool CtSearchIndex::open(const fs::path& index_path, std::string* pError)
         return false;
     }
     _path = index_path;
+    {
+        // the sqlite-vec module (vec0) on this connection; compiled with SQLITE_CORE so the api table is unused
+        char* pVecErr{nullptr};
+        if (sqlite3_vec_init(_pDb, &pVecErr, nullptr) != SQLITE_OK) {
+            spdlog::error("search index: sqlite-vec init: {}", pVecErr ? pVecErr : "unknown error");
+            if (pVecErr) sqlite3_free(pVecErr);
+        }
+    }
     if (not _exec("PRAGMA journal_mode=WAL", pError) or not _exec("PRAGMA synchronous=NORMAL", pError)) {
         close();
         return false;
@@ -181,7 +204,10 @@ bool CtSearchIndex::semantic_configure(const std::string& model_name, const int 
         _set_meta("embedding_dim", std::to_string(dim));
         spdlog::info("search index: semantic index reset for model {} ({} dims)", model_name, dim);
     }
-    return _ensure_vec_table(dim);
+    if (not _ensure_vec_table(dim)) return false;
+    // chunks given up while the vector table was missing get another chance
+    _exec("UPDATE chunks SET embedded=0 WHERE embedded=2");
+    return true;
 }
 
 /*static*/ std::vector<Glib::ustring> CtSearchIndex::make_chunks(const Glib::ustring& node_name, const Glib::ustring& body,
